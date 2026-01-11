@@ -10,6 +10,118 @@ const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
 
 // Minimum time between Groq calls (30 seconds to avoid rate limiting)
 const MIN_CALL_INTERVAL_MS = 30 * 1000;
+const ISO_DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+const WEEKDAY_INDEX = {
+    sunday: 0,
+    monday: 1,
+    tuesday: 2,
+    wednesday: 3,
+    thursday: 4,
+    friday: 5,
+    saturday: 6,
+};
+
+const toIsoDateString = (value) => {
+    try {
+        const date = value instanceof Date ? new Date(value.getTime()) : new Date(value);
+        if (Number.isNaN(date.getTime())) {
+            return null;
+        }
+        return date.toISOString().split('T')[0];
+    } catch {
+        return null;
+    }
+};
+
+const addDays = (date, days) => {
+    const result = new Date(date.getTime());
+    result.setDate(result.getDate() + days);
+    return result;
+};
+
+const resolveRelativeWeekday = (text, referenceDate) => {
+    const match = text.match(/^(next\s+)?(monday|tuesday|wednesday|thursday|friday|saturday|sunday)$/);
+    if (!match) return null;
+    const isNext = Boolean(match[1]);
+    const dayName = match[2];
+    const targetIndex = WEEKDAY_INDEX[dayName];
+    if (typeof targetIndex !== 'number') return null;
+
+    const refIndex = referenceDate.getDay();
+    let delta = (targetIndex - refIndex + 7) % 7;
+    if (delta === 0 && (isNext || text.startsWith('next'))) {
+        delta = 7;
+    }
+    if (isNext && delta <= 0) {
+        delta += 7;
+    }
+    if (delta === 0) {
+        return toIsoDateString(referenceDate);
+    }
+    return toIsoDateString(addDays(referenceDate, delta));
+};
+
+const normalizeDeadlineValue = (input, referenceDate = new Date()) => {
+    if (input === null || input === undefined) return null;
+    const text = String(input).trim();
+    if (!text) return null;
+
+    const lower = text.toLowerCase();
+    if (['not specified', 'unspecified', 'none', 'n/a'].includes(lower)) {
+        return null;
+    }
+
+    if (ISO_DATE_REGEX.test(text)) {
+        return text;
+    }
+
+    const parsed = toIsoDateString(text);
+    if (parsed) {
+        return parsed;
+    }
+
+    const relativeMap = {
+        today: 0,
+        tomorrow: 1,
+        yesterday: -1,
+    };
+    if (relativeMap.hasOwnProperty(lower)) {
+        return toIsoDateString(addDays(referenceDate, relativeMap[lower]));
+    }
+
+    if (lower === 'next week') {
+        return toIsoDateString(addDays(referenceDate, 7));
+    }
+
+    if (lower === 'end of week') {
+        const refDow = referenceDate.getDay();
+        let delta = (5 - refDow + 7) % 7;
+        if (delta <= 0) delta += 7;
+        return toIsoDateString(addDays(referenceDate, delta));
+    }
+
+    if (lower === 'end of next week') {
+        const refDow = referenceDate.getDay();
+        let delta = (5 - refDow + 7) % 7;
+        if (delta <= 0) delta += 7;
+        delta += 7;
+        return toIsoDateString(addDays(referenceDate, delta));
+    }
+
+    const weekdayIso = resolveRelativeWeekday(lower, referenceDate);
+    if (weekdayIso) {
+        return weekdayIso;
+    }
+
+    return null;
+};
+
+const normalizeTaskDeadlines = (tasks = [], referenceDate = new Date()) => (
+    tasks.map((task) => ({
+        ...task,
+        deadline: normalizeDeadlineValue(task.deadline, referenceDate),
+    }))
+);
 
 // ============================================
 // REGEX PATTERNS FOR INTENT DETECTION
@@ -157,6 +269,9 @@ class TranscriptBuffer {
         this.isCallingGemini = true;
         const transcriptText = this.getBufferedText();
         const transcriptCount = this.buffer.length;
+        const referenceTimestamp = this.buffer.length ? this.buffer[this.buffer.length - 1].timestamp : Date.now();
+        const referenceDate = new Date(referenceTimestamp);
+        const meetingDateIso = toIsoDateString(referenceDate) || toIsoDateString(new Date());
 
         console.log(`%c[Groq] 🚀 Calling with ${transcriptCount} transcripts (${transcriptText.length} chars)`, "font-weight: bold; color: #fbbf24;");
 
@@ -168,6 +283,8 @@ TRANSCRIPT:
 ${transcriptText}
 """
 
+Use ${meetingDateIso || 'the current date'} as the meeting date when resolving phrases like "tomorrow" or "next Friday". Always convert relative references into absolute calendar dates.
+
 Extract tasks in the following STRICT JSON format. Return ONLY valid JSON, no markdown or explanations:
 
 {
@@ -177,7 +294,7 @@ Extract tasks in the following STRICT JSON format. Return ONLY valid JSON, no ma
       "description": "Detailed description of what needs to be done",
       "assignee": "Person responsible (or 'Unassigned' if not clear)",
       "priority": "high" | "medium" | "low",
-      "deadline": "Mentioned deadline or 'Not specified'",
+      "deadline": "YYYY-MM-DD" | null,
       "confidence": 0.0-1.0
     }
   ],
@@ -266,6 +383,11 @@ If no clear tasks are found, return: {"tasks": [], "summary": "No clear tasks id
                 console.error("[Groq] Failed to parse response:", parseError);
                 console.log("[Groq] Raw response:", textResponse.substring(0, 500) + "...");
                 result = { tasks: [], summary: "Failed to parse response", error: parseError.message };
+            }
+
+            // Normalize deadlines to ISO format
+            if (result && Array.isArray(result.tasks)) {
+                result.tasks = normalizeTaskDeadlines(result.tasks, referenceDate);
             }
 
             // Log the structured task candidates

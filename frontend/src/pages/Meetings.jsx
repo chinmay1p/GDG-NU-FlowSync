@@ -245,6 +245,7 @@ const Meetings = () => {
 								)}
 								{meetings.map((meeting) => {
 									const statusKey = deriveStatusKey(meeting)
+									const isEndedMeeting = statusKey === 'ENDED'
 									const statusLabel = statusLabels[statusKey] || 'Scheduled'
 									return (
 										<tr key={meeting.meetingId}>
@@ -261,23 +262,24 @@ const Meetings = () => {
 											<td className="px-6 py-4 text-slate-600">{formatDate(meeting.startTime)}</td>
 											<td className="px-6 py-4">
 												<div className="flex flex-wrap gap-2">
-													{meeting.joinUrl && (
+													{!isEndedMeeting && meeting.joinUrl && (
 														<a href={meeting.joinUrl} target="_blank" rel="noreferrer" className="rounded-full border border-slate-300 px-3 py-1 text-xs font-semibold text-slate-600 hover:border-slate-500">
 															Join
 														</a>
 													)}
-													{meeting.startUrl && canSchedule && (
+													{!isEndedMeeting && meeting.startUrl && canSchedule && (
 														<a href={meeting.startUrl} target="_blank" rel="noreferrer" className="rounded-full border border-slate-900 px-3 py-1 text-xs font-semibold text-slate-900 hover:bg-slate-50">
 															Host
 														</a>
 													)}
-													{/* Capture Button for this meeting */}
-													<button
-														onClick={() => setCaptureMeeting(meeting)}
-														className="rounded-full bg-gradient-to-r from-indigo-500 to-purple-600 px-3 py-1 text-xs font-semibold text-white hover:from-indigo-600 hover:to-purple-700 shadow-sm"
-													>
-														🎙️ Capture
-													</button>
+													{!isEndedMeeting && (
+														<button
+															onClick={() => setCaptureMeeting(meeting)}
+															className="rounded-full bg-gradient-to-r from-indigo-500 to-purple-600 px-3 py-1 text-xs font-semibold text-white hover:from-indigo-600 hover:to-purple-700 shadow-sm"
+														>
+															🎙️ Capture
+														</button>
+													)}
 													<button
 														onClick={() => openMeetingDetail(meeting)}
 														className="rounded-full border border-indigo-200 px-3 py-1 text-xs font-semibold text-indigo-700 hover:border-indigo-500"

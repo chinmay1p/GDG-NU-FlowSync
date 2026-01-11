@@ -27,6 +27,7 @@ const TaskApprovalPopup = () => {
         <TaskApprovalModal
             pendingId={pendingApproval.pendingId}
             meetingId={pendingApproval.meetingId}
+            teamId={pendingApproval.teamId}
             taskCandidates={pendingApproval.taskCandidates}
             pendingCount={pendingCount}
             onApprove={handleApprove}

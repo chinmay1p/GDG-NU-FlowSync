@@ -1,4 +1,37 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import useContextStore from '../store/contextStore';
+
+const ISO_DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+
+const toDateInputValue = (value) => {
+    if (!value) return '';
+    if (typeof value === 'string' && ISO_DATE_REGEX.test(value)) {
+        return value;
+    }
+    const parsed = Date.parse(value);
+    if (Number.isNaN(parsed)) {
+        return '';
+    }
+    return new Date(parsed).toISOString().split('T')[0];
+};
+
+const normalizeTeamMembers = (members = []) => {
+    const seen = new Set();
+    return members.reduce((acc, member) => {
+        const email = (member?.email || '').toLowerCase();
+        const key = email || member?.uid;
+        if (!key || seen.has(key)) {
+            return acc;
+        }
+        seen.add(key);
+        acc.push({
+            uid: member?.uid || key,
+            email: member?.email || '',
+            role: member?.role || 'MEMBER',
+        });
+        return acc;
+    }, []);
+};
 
 /**
  * Enhanced Task Detection Modal with editable fields and multi-task support
@@ -7,6 +40,7 @@ import { useState, useEffect } from 'react';
 const TaskApprovalModal = ({
     pendingId,
     meetingId,
+    teamId = null,
     taskCandidates = [],
     onApprove,
     onReject,
@@ -18,11 +52,35 @@ const TaskApprovalModal = ({
     errorMessage = null,
     pendingCount = 0,
 }) => {
+    const context = useContextStore((state) => state.context);
     const [currentIndex, setCurrentIndex] = useState(0);
     const [editedTasks, setEditedTasks] = useState([]);
     const [createGithubIssue, setCreateGithubIssue] = useState(false);
     const [statusMessage, setStatusMessage] = useState(null);
     const [batchReason, setBatchReason] = useState('');
+
+    const teamMembers = useMemo(() => {
+        if (!teamId || !context) return [];
+        const orgTeams = Array.isArray(context.orgTeams) ? context.orgTeams : [];
+        const userTeams = Array.isArray(context.teams) ? context.teams : [];
+        const teamSources = [...orgTeams, ...userTeams];
+        const foundTeam = teamSources.find((team) => team?.teamId === teamId);
+        if (!foundTeam || !Array.isArray(foundTeam.members)) {
+            return [];
+        }
+        return normalizeTeamMembers(foundTeam.members);
+    }, [context, teamId]);
+
+    const rosterEmailSet = useMemo(() => {
+        const set = new Set();
+        teamMembers.forEach((member) => {
+            const email = (member.email || '').toLowerCase();
+            if (email) {
+                set.add(email);
+            }
+        });
+        return set;
+    }, [teamMembers]);
 
     // Initialize edited tasks from candidates
     useEffect(() => {
@@ -35,7 +93,7 @@ const TaskApprovalModal = ({
                 description: task.description || '',
                 assignee: task.assignee || '',
                 priority: task.priority || 'medium',
-                deadline: task.deadline || '',
+                deadline: toDateInputValue(task.deadline) || '',
                 confidence: task.confidence || 0,
                 processed: Boolean(task.approved || task.rejected),
             }))
@@ -57,7 +115,7 @@ const TaskApprovalModal = ({
                         description: task.description,
                         assignee: task.assignee,
                         priority: (task.priority || 'medium').toLowerCase(),
-                        deadline: task.deadline,
+                        deadline: task.deadline || null,
                     },
                 };
             })
@@ -66,7 +124,14 @@ const TaskApprovalModal = ({
     const handleFieldChange = (field, value) => {
         setEditedTasks(prev => {
             const updated = [...prev];
-            updated[currentIndex] = { ...updated[currentIndex], [field]: value };
+            let nextValue = value;
+            if (field === 'assignee') {
+                nextValue = value ? value.trim().toLowerCase() : '';
+            }
+            if (field === 'deadline') {
+                nextValue = value ? toDateInputValue(value) : '';
+            }
+            updated[currentIndex] = { ...updated[currentIndex], [field]: nextValue };
             return updated;
         });
     };
@@ -80,7 +145,7 @@ const TaskApprovalModal = ({
                 description: currentTask.description,
                 assignee: currentTask.assignee,
                 priority: (currentTask.priority || 'medium').toLowerCase(),
-                deadline: currentTask.deadline,
+                deadline: currentTask.deadline || null,
             };
 
             await onApprove(pendingId, currentIndex, edits, createGithubIssue);
@@ -294,13 +359,36 @@ const TaskApprovalModal = ({
                                 <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">
                                     Assignee
                                 </label>
-                                <input
-                                    type="text"
-                                    value={currentTask.assignee || ''}
-                                    onChange={(e) => handleFieldChange('assignee', e.target.value)}
-                                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-                                    placeholder="Email or name"
-                                />
+                                <div className="space-y-2">
+                                    {teamMembers.length > 0 && (
+                                        <select
+                                            value={rosterEmailSet.has((currentTask.assignee || '').toLowerCase()) ? currentTask.assignee : ''}
+                                            onChange={(e) => handleFieldChange('assignee', e.target.value)}
+                                            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                                        >
+                                            <option value="">Select team member</option>
+                                            {teamMembers.map((member) => (
+                                                <option
+                                                    key={member.uid || member.email}
+                                                    value={(member.email || '').toLowerCase()}
+                                                    disabled={!member.email}
+                                                >
+                                                    {member.email || 'Unknown member'}{member.role ? ` (${member.role})` : ''}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    )}
+                                    <input
+                                        type="email"
+                                        value={currentTask.assignee || ''}
+                                        onChange={(e) => handleFieldChange('assignee', e.target.value)}
+                                        className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                                        placeholder={teamMembers.length ? 'Or type teammate email' : 'Email or name'}
+                                    />
+                                    {teamMembers.length > 0 && currentTask.assignee && !rosterEmailSet.has((currentTask.assignee || '').toLowerCase()) && (
+                                        <p className="text-xs text-amber-600">Detected assignee isn’t on this team. Pick someone from the roster above.</p>
+                                    )}
+                                </div>
                             </div>
                             <div>
                                 <label className="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1">
@@ -324,12 +412,13 @@ const TaskApprovalModal = ({
                                 Deadline
                             </label>
                             <input
-                                type="text"
+                                type="date"
                                 value={currentTask.deadline || ''}
                                 onChange={(e) => handleFieldChange('deadline', e.target.value)}
                                 className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-                                placeholder="e.g., Friday, End of week"
+                                placeholder="YYYY-MM-DD"
                             />
+                            <p className="mt-1 text-[11px] text-slate-500">All deadlines must be ISO dates (YYYY-MM-DD). Leave blank if no timing was mentioned.</p>
                         </div>
 
                         {/* GitHub Issue toggle */}
