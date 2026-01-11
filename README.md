@@ -1,5 +1,5 @@
 # 🚀 StrataGem
-### Team: Travelling Salesmen
+### Team: MindLoop
 
 An all-in-one **project management, task management, and meeting intelligence platform** that connects **Slack, GitHub, dashboards, and Google Meet** to ensure that **no action item is ever lost**.
 
