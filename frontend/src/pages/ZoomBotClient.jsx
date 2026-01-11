@@ -13,6 +13,7 @@ import { useParams } from "react-router-dom";
 import { ZoomMtg } from "@zoom/meetingsdk";
 import { authedRequest } from "../services/orgApi";
 import { transcriptBuffer } from "../services/TranscriptBuffer";
+import { auth } from "../config/firebase";
 
 // Zoom SDK setup
 const ZOOM_SDK_VERSION = "5.0.4";
@@ -34,6 +35,7 @@ const ZoomBotClient = () => {
     const audioContextRef = useRef(null);
     const deepgramSocketRef = useRef(null);
     const hasInitializedRef = useRef(false);
+    const cleanupGuardRef = useRef({ skip: true });
 
     // Convert Float32Array to Int16Array for Deepgram
     const float32ToInt16 = useCallback((float32Array) => {
@@ -343,8 +345,7 @@ const ZoomBotClient = () => {
 
     // Initialize bot on mount
     useEffect(() => {
-        if (hasInitializedRef.current) return;
-        hasInitializedRef.current = true;
+        cleanupGuardRef.current = { skip: true };
 
         const initBot = async () => {
             if (!meetingId) {
@@ -353,20 +354,68 @@ const ZoomBotClient = () => {
             }
 
             console.log(`[Bot] Initializing for meeting ${meetingId}`);
+            setStatus("Waiting for authentication...");
+
+            // Wait for Firebase auth to be ready (popup windows need time to restore auth state)
+            const waitForAuth = () => new Promise((resolve) => {
+                let resolved = false;
+
+                // If already authenticated, resolve immediately
+                if (auth.currentUser) {
+                    console.log("[Bot] Auth already available");
+                    resolve(auth.currentUser);
+                    return;
+                }
+
+                // Otherwise wait for auth state change
+                console.log("[Bot] Waiting for auth state...");
+                const unsubscribe = auth.onAuthStateChanged((user) => {
+                    if (user && !resolved) {
+                        resolved = true;
+                        console.log("[Bot] Auth state received");
+                        unsubscribe();
+                        resolve(user);
+                    }
+                });
+
+                // Timeout after 10 seconds
+                setTimeout(() => {
+                    if (!resolved) {
+                        resolved = true;
+                        unsubscribe();
+                        console.warn("[Bot] Auth timeout - no user after 10s");
+                        resolve(null);
+                    }
+                }, 10000);
+            });
+
+            const user = await waitForAuth();
+            if (!user) {
+                setStatus("Error: Authentication timed out");
+                console.error("[Bot] No authenticated user available");
+                return;
+            }
+
             setStatus("Fetching meeting details...");
 
             try {
                 // Fetch meeting details from backend
                 const meetingDetails = await authedRequest(`/meetings/${meetingId}`);
+                console.log("[Bot] Meeting details received:", JSON.stringify(meetingDetails, null, 2));
 
                 if (!meetingDetails || !meetingDetails.zoomMeetingId) {
-                    // If no Zoom meeting ID, this might be a different meeting type
-                    // For now, just show status
-                    setStatus("Waiting for Zoom meeting details...");
-                    console.log("[Bot] Meeting details:", meetingDetails);
+                    // If no Zoom meeting ID, this meeting cannot be joined as a bot
+                    console.warn("[Bot] Meeting has no Zoom meeting ID:", meetingDetails);
+                    setStatus(`Error: No Zoom meeting ID found. Meeting status: ${meetingDetails?.status || 'unknown'}`);
+                    // Extended timeout for debugging - auto-close after 30 seconds
+                    setTimeout(() => {
+                        console.log("[Bot] Closing window - no Zoom meeting ID");
+                        window.close();
+                    }, 30000);
                     return;
                 }
 
+                console.log(`[Bot] Joining Zoom meeting: ${meetingDetails.zoomMeetingId}`);
                 await joinZoomMeeting(meetingDetails);
 
             } catch (err) {
@@ -375,10 +424,16 @@ const ZoomBotClient = () => {
             }
         };
 
-        initBot();
+        if (!hasInitializedRef.current) {
+            hasInitializedRef.current = true;
+            initBot();
+        }
 
-        // Cleanup on unmount
         return () => {
+            if (cleanupGuardRef.current.skip) {
+                cleanupGuardRef.current.skip = false;
+                return;
+            }
             cleanup();
         };
     }, [meetingId, joinZoomMeeting, cleanup]);

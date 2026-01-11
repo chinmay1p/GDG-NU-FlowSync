@@ -1,8 +1,9 @@
 import os
 import logging
+import secrets
 import firebase_admin
 from firebase_admin import credentials, auth
-from fastapi import HTTPException, Depends
+from fastapi import HTTPException, Depends, Header
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 
 logger = logging.getLogger(__name__)
@@ -83,6 +84,18 @@ def verify_firebase_token_ws(token: str) -> tuple[bool, dict | None, str]:
 
 
 security = HTTPBearer()
+
+
+async def require_zoom_bot_key(x_zoom_bot_key: str = Header(default=None, alias='X-Zoom-Bot-Key')) -> str:
+
+	expected_key = os.getenv('ZOOM_BOT_API_KEY')
+	if not expected_key:
+		raise HTTPException(status_code=500, detail='ZOOM_BOT_API_KEY is not configured')
+
+	if not x_zoom_bot_key or not secrets.compare_digest(x_zoom_bot_key, expected_key):
+		raise HTTPException(status_code=401, detail='Invalid or missing bot API key')
+
+	return 'zoom-bot'
 
 
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> dict:

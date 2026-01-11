@@ -9,16 +9,20 @@ from datetime import datetime
 
 from fastapi import HTTPException, status
 from firebase_admin import firestore
-import google.generativeai as genai
+from openai import OpenAI
 
 from app.core.security import ensure_firebase_initialized
 
 logger = logging.getLogger(__name__)
 
-# Configure Gemini
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-if GEMINI_API_KEY:
-    genai.configure(api_key=GEMINI_API_KEY)
+# Configure Groq/OpenAI-compatible client
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+GROQ_API_BASE = os.getenv("GROQ_API_BASE", "https://api.groq.com/openai/v1")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
+
+groq_client: Optional[OpenAI] = None
+if GROQ_API_KEY:
+    groq_client = OpenAI(api_key=GROQ_API_KEY, base_url=GROQ_API_BASE)
 
 
 class MeetingTranscriptService:
@@ -168,6 +172,9 @@ class MeetingTranscriptService:
         timestamp: int,
         speaker: Optional[str] = None,
         org_id: str,
+        team_id: Optional[str] = None,
+        allow_create: bool = False,
+        created_by: Optional[str] = None,
     ) -> Dict:
         """Append a final transcript segment to the meeting."""
         return await asyncio.to_thread(
@@ -177,6 +184,9 @@ class MeetingTranscriptService:
             timestamp,
             speaker,
             org_id,
+            team_id,
+            allow_create,
+            created_by,
         )
 
     def _append_transcript_sync(
@@ -186,6 +196,9 @@ class MeetingTranscriptService:
         timestamp: int,
         speaker: Optional[str],
         org_id: str,
+        team_id: Optional[str],
+        allow_create: bool,
+        created_by: Optional[str],
     ) -> Dict:
         if not text or not text.strip():
             return {"success": False, "reason": "Empty text"}
@@ -195,14 +208,39 @@ class MeetingTranscriptService:
         # Verify meeting exists and belongs to org
         meeting_doc = client.collection(self.MEETINGS_COLLECTION).document(meeting_id).get()
         if not meeting_doc.exists:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Meeting not found")
-
-        meeting_data = meeting_doc.to_dict() or {}
-        if meeting_data.get("orgId") != org_id:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+            if not allow_create:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Meeting not found")
+            meeting_payload = {
+                "meetingId": meeting_id,
+                "orgId": org_id,
+                "teamId": team_id,
+                "title": f"Meeting {meeting_id[:8]}",
+                "createdBy": created_by or "system",
+                "status": self.STATUS_ACTIVE,
+                "startedAt": firestore.SERVER_TIMESTAMP,
+                "hasSummary": False,
+            }
+            client.collection(self.MEETINGS_COLLECTION).document(meeting_id).set(meeting_payload)
+            meeting_data = meeting_payload
+        else:
+            meeting_data = meeting_doc.to_dict() or {}
+            if meeting_data.get("orgId") != org_id:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+            if team_id and not meeting_data.get("teamId"):
+                client.collection(self.MEETINGS_COLLECTION).document(meeting_id).update({"teamId": team_id})
+                meeting_data["teamId"] = team_id
 
         # Append to transcript
         transcript_ref = client.collection(self.TRANSCRIPTS_COLLECTION).document(meeting_id)
+        transcript_doc = transcript_ref.get()
+        if not transcript_doc.exists:
+            transcript_ref.set({
+                "meetingId": meeting_id,
+                "orgId": org_id,
+                "teamId": meeting_data.get("teamId"),
+                "segments": [],
+                "createdAt": firestore.SERVER_TIMESTAMP,
+            })
         segment = {
             "text": text.strip(),
             "timestamp": timestamp,
@@ -272,9 +310,9 @@ class MeetingTranscriptService:
     # ==========================================
 
     def _generate_summary_sync(self, meeting_id: str, org_id: str) -> Optional[Dict]:
-        """Generate meeting summary using Gemini (called once at meeting end)."""
-        if not GEMINI_API_KEY:
-            logger.warning("GEMINI_API_KEY not set, skipping summary generation")
+        """Generate meeting summary using Groq (called once at meeting end)."""
+        if not groq_client:
+            logger.warning("GROQ_API_KEY not set, skipping summary generation")
             return None
 
         client = self._get_client()
@@ -299,15 +337,16 @@ class MeetingTranscriptService:
             logger.info("Transcript too short for summary: %d chars", len(full_transcript))
             return None
 
-        # Generate summary with Gemini
-        prompt = f"""You are a meeting summarizer. Analyze the following meeting transcript and provide a structured summary.
+        # Generate summary with Groq
+        system_prompt = "You are a meeting summarizer. Provide accurate, structured summaries with clear actionability."
+        user_prompt = f"""Analyze the following meeting transcript and provide a structured summary in JSON.
 
 TRANSCRIPT:
 \"\"\"
 {full_transcript}
 \"\"\"
 
-Provide a summary in the following JSON format. Return ONLY valid JSON:
+Return ONLY valid JSON in this shape:
 
 {{
   "title": "Brief meeting title (inferred from discussion)",
@@ -320,19 +359,22 @@ Provide a summary in the following JSON format. Return ONLY valid JSON:
   "nextSteps": ["Agreed next steps"]
 }}
 
-Focus on accuracy. If something is unclear, say so. Do not hallucinate details."""
+If something is unclear, state that explicitly and do not invent facts."""
 
         try:
-            model = genai.GenerativeModel("gemini-2.5-flash")
-            response = model.generate_content(
-                prompt,
-                generation_config=genai.GenerationConfig(
-                    temperature=0.2,
-                    max_output_tokens=2048,
-                ),
+            response = groq_client.chat.completions.create(
+                model=GROQ_MODEL,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                temperature=0.2,
+                max_tokens=2048,
             )
 
-            response_text = response.text
+            response_text = ""
+            if response.choices:
+                response_text = response.choices[0].message.content or ""
 
             # Parse JSON from response
             import json
@@ -421,6 +463,45 @@ Focus on accuracy. If something is unclear, say so. Do not hallucinate details."
             "generated": True,
             **summary_data,
         }
+
+    async def delete_meeting(
+        self,
+        *,
+        meeting_id: str,
+        org_id: str,
+    ) -> Dict:
+        """Permanently delete a meeting and related artifacts."""
+        return await asyncio.to_thread(
+            self._delete_meeting_sync,
+            meeting_id,
+            org_id,
+        )
+
+    def _delete_meeting_sync(
+        self,
+        meeting_id: str,
+        org_id: str,
+    ) -> Dict:
+        client = self._get_client()
+        meeting_ref = client.collection(self.MEETINGS_COLLECTION).document(meeting_id)
+        meeting_doc = meeting_ref.get()
+
+        if not meeting_doc.exists:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Meeting not found")
+
+        meeting_data = meeting_doc.to_dict() or {}
+        if meeting_data.get("orgId") != org_id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+
+        # Delete primary meeting record
+        meeting_ref.delete()
+
+        # Delete transcript and summary artifacts (best-effort)
+        client.collection(self.TRANSCRIPTS_COLLECTION).document(meeting_id).delete()
+        client.collection(self.SUMMARIES_COLLECTION).document(meeting_id).delete()
+
+        logger.info("Meeting %s permanently deleted for org %s", meeting_id, org_id)
+        return {"meetingId": meeting_id, "deleted": True}
 
     # ==========================================
     # MEETING LISTING
@@ -545,20 +626,40 @@ Focus on accuracy. If something is unclear, say so. Do not hallucinate details."
             if not self._is_team_member(client, team_id, user_id):
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not a member of this team")
 
+        # Helper to serialize timestamps
+        def serialize_ts(val):
+            if val is None:
+                return None
+            if hasattr(val, 'isoformat'):
+                return val.isoformat()
+            return str(val) if val else None
+
         started_at = data.get("startedAt")
         ended_at = data.get("endedAt")
+        created_at = data.get("createdAt")
+        start_time = data.get("startTime")
 
+        # Return all fields needed by the bot and frontend
         return {
             "meetingId": data.get("meetingId"),
             "orgId": data.get("orgId"),
             "teamId": team_id,
             "title": data.get("title"),
+            "topic": data.get("topic") or data.get("title"),
             "meetingUrl": data.get("meetingUrl"),
             "status": data.get("status"),
             "createdBy": data.get("createdBy"),
-            "startedAt": started_at.isoformat() if started_at else None,
-            "endedAt": ended_at.isoformat() if ended_at else None,
+            "startedAt": serialize_ts(started_at),
+            "endedAt": serialize_ts(ended_at),
+            "createdAt": serialize_ts(created_at),
+            "startTime": serialize_ts(start_time) if start_time else serialize_ts(started_at),
+            "durationMinutes": data.get("durationMinutes"),
             "hasSummary": data.get("hasSummary", False),
+            # Critical fields for bot
+            "zoomMeetingId": data.get("zoomMeetingId"),
+            "joinUrl": data.get("joinUrl"),
+            "startUrl": data.get("startUrl"),
+            "passcode": data.get("passcode"),
         }
 
     # ==========================================

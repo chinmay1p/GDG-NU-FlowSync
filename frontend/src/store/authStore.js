@@ -23,6 +23,23 @@ const useAuthStore = create((set, get) => ({
 	error: null,
 
 	/* -------------------------------
+	   FIREBASE AUTH STATE (APP LEVEL)
+	-------------------------------- */
+	setFromFirebase: (payload) => {
+		if (!payload) {
+			set({ user: null, idToken: null, loading: false, error: null })
+			return
+		}
+		const { uid, email, displayName, photoURL, idToken } = payload
+		set({
+			user: formatUser({ uid, email, name: displayName, picture: photoURL }),
+			idToken,
+			loading: false,
+			error: null,
+		})
+	},
+
+	/* -------------------------------
 	   FIREBASE AUTH STATE SYNC
 	-------------------------------- */
 	initializeSubscription: () => {

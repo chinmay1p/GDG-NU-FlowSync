@@ -131,62 +131,16 @@ export function useTaskDetectionEvents() {
 }
 
 /**
- * Hook that auto-spawns bot windows when START_BOT events are received
- * Ensures only one bot per meeting
+ * @deprecated Bot auto-spawn has been disabled. 
+ * Use universal audio capture from the Meetings page instead.
+ * This hook is kept for backwards compatibility but does nothing.
  */
 export function useBotSpawner() {
-    const { events, clearEvent } = useNotificationSocket();
-    const spawnedMeetingsRef = useRef(new Set());
-
-    useEffect(() => {
-        const startBotEvents = events.filter(e => e.event === 'START_BOT');
-
-        for (const event of startBotEvents) {
-            const { meetingId, zoomMeetingNumber } = event.payload || {};
-
-            if (!meetingId) {
-                clearEvent(event.id);
-                continue;
-            }
-
-            // Check if bot already spawned for this meeting
-            if (spawnedMeetingsRef.current.has(meetingId)) {
-                console.log(`[BotSpawner] Bot already spawned for meeting ${meetingId}`);
-                clearEvent(event.id);
-                continue;
-            }
-
-            // Spawn the bot
-            console.log(`[BotSpawner] Spawning bot for meeting ${meetingId} (Zoom: ${zoomMeetingNumber})`);
-            spawnedMeetingsRef.current.add(meetingId);
-
-            // Open bot in a hidden/minimized window
-            const botWindow = window.open(
-                `/bot/zoom/${meetingId}`,
-                `zoom-bot-${meetingId}`,
-                'width=800,height=600,left=9999,top=9999'
-            );
-
-            if (botWindow) {
-                console.log(`[BotSpawner] Bot window opened for meeting ${meetingId}`);
-            } else {
-                console.warn(`[BotSpawner] Failed to open bot window (popup blocked?)`);
-                spawnedMeetingsRef.current.delete(meetingId);
-            }
-
-            clearEvent(event.id);
-        }
-    }, [events, clearEvent]);
-
-    // Cleanup function to remove meeting from set when bot closes
-    const onBotClosed = useCallback((meetingId) => {
-        spawnedMeetingsRef.current.delete(meetingId);
-        console.log(`[BotSpawner] Bot closed for meeting ${meetingId}`);
-    }, []);
-
+    // No-op - bot auto-spawn is disabled
+    // Users should use the "Capture" button on the Meetings page instead
     return {
-        spawnedMeetings: spawnedMeetingsRef.current,
-        onBotClosed,
+        spawnedMeetings: new Set(),
+        onBotClosed: () => { },
     };
 }
 

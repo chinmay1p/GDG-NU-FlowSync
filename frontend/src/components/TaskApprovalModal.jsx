@@ -10,31 +10,58 @@ const TaskApprovalModal = ({
     taskCandidates = [],
     onApprove,
     onReject,
+    onApproveAll,
+    onRejectAll,
     onClose,
     isLoading = false,
+    isSyncing = false,
+    errorMessage = null,
+    pendingCount = 0,
 }) => {
     const [currentIndex, setCurrentIndex] = useState(0);
     const [editedTasks, setEditedTasks] = useState([]);
     const [createGithubIssue, setCreateGithubIssue] = useState(false);
     const [statusMessage, setStatusMessage] = useState(null);
+    const [batchReason, setBatchReason] = useState('');
 
     // Initialize edited tasks from candidates
     useEffect(() => {
-        setEditedTasks(taskCandidates.map(task => ({
-            title: task.title || '',
-            description: task.description || '',
-            assignee: task.assignee || '',
-            priority: task.priority || 'medium',
-            deadline: task.deadline || '',
-            confidence: task.confidence || 0,
-            processed: task.approved || task.rejected || false,
-        })));
-    }, [taskCandidates]);
+        setCurrentIndex(0);
+        setStatusMessage(null);
+        setBatchReason('');
+        setEditedTasks(
+            taskCandidates.map((task) => ({
+                title: task.title || '',
+                description: task.description || '',
+                assignee: task.assignee || '',
+                priority: task.priority || 'medium',
+                deadline: task.deadline || '',
+                confidence: task.confidence || 0,
+                processed: Boolean(task.approved || task.rejected),
+            }))
+        );
+    }, [taskCandidates, pendingId]);
 
     if (!taskCandidates.length || !pendingId) return null;
 
     const currentTask = editedTasks[currentIndex] || {};
-    const remainingTasks = editedTasks.filter(t => !t.processed).length;
+    const remainingTasks = editedTasks.filter((t) => !t.processed).length;
+    const pendingEditPayloads = () =>
+        editedTasks
+            .map((task, index) => {
+                if (task.processed) return null;
+                return {
+                    taskIndex: index,
+                    edits: {
+                        title: task.title,
+                        description: task.description,
+                        assignee: task.assignee,
+                        priority: (task.priority || 'medium').toLowerCase(),
+                        deadline: task.deadline,
+                    },
+                };
+            })
+            .filter(Boolean);
 
     const handleFieldChange = (field, value) => {
         setEditedTasks(prev => {
@@ -52,7 +79,7 @@ const TaskApprovalModal = ({
                 title: currentTask.title,
                 description: currentTask.description,
                 assignee: currentTask.assignee,
-                priority: currentTask.priority,
+                priority: (currentTask.priority || 'medium').toLowerCase(),
                 deadline: currentTask.deadline,
             };
 
@@ -126,6 +153,41 @@ const TaskApprovalModal = ({
         }
     };
 
+    const handleApproveAll = async () => {
+        if (!onApproveAll) return;
+        const editPayload = pendingEditPayloads();
+        if (editPayload.length === 0) {
+            setStatusMessage({ type: 'info', text: 'All tasks already processed.' });
+            return;
+        }
+        setStatusMessage({ type: 'loading', text: 'Approving remaining tasks...' });
+        try {
+            await onApproveAll(pendingId, editPayload, createGithubIssue);
+            setStatusMessage({ type: 'success', text: 'All pending tasks approved.' });
+        } catch (error) {
+            setStatusMessage({ type: 'error', text: error.message || 'Failed to approve all tasks' });
+        }
+    };
+
+    const handleRejectAll = async () => {
+        if (!onRejectAll) return;
+        const indexes = editedTasks
+            .map((task, index) => (!task.processed ? index : null))
+            .filter((value) => value !== null);
+        if (indexes.length === 0) {
+            setStatusMessage({ type: 'info', text: 'All tasks already processed.' });
+            return;
+        }
+        setStatusMessage({ type: 'loading', text: 'Rejecting remaining tasks...' });
+        try {
+            await onRejectAll(pendingId, indexes, batchReason || null);
+            setStatusMessage({ type: 'success', text: 'All pending tasks rejected.' });
+            setBatchReason('');
+        } catch (error) {
+            setStatusMessage({ type: 'error', text: error.message || 'Failed to reject all tasks' });
+        }
+    };
+
     const getPriorityColor = (priority) => {
         switch (priority?.toLowerCase()) {
             case 'high': return 'border-red-200 bg-red-50 text-red-700';
@@ -150,6 +212,10 @@ const TaskApprovalModal = ({
                         <div>
                             <p className="text-xs uppercase tracking-widest text-indigo-200">AI Task Detection</p>
                             <h2 className="text-lg font-semibold text-white">Review Detected Tasks</h2>
+                            <p className="text-xs text-indigo-200">Meeting ID: {meetingId || 'Unknown'}</p>
+                            {pendingCount > 1 && (
+                                <p className="text-xs text-indigo-200">{pendingCount} pending approvals in queue</p>
+                            )}
                         </div>
                         <div className="flex items-center gap-2">
                             <span className="rounded-full bg-white/20 px-3 py-1 text-sm font-medium text-white">
@@ -174,6 +240,16 @@ const TaskApprovalModal = ({
 
                 {/* Body */}
                 <div className="p-6 max-h-[60vh] overflow-y-auto">
+                    {isSyncing && (
+                        <div className="mb-3 rounded-xl bg-indigo-50 px-4 py-3 text-xs font-medium text-indigo-700">
+                            Syncing latest pending tasks…
+                        </div>
+                    )}
+                    {errorMessage && (
+                        <div className="mb-3 rounded-xl bg-red-50 px-4 py-3 text-xs font-medium text-red-700">
+                            {errorMessage}
+                        </div>
+                    )}
                     {/* Confidence indicator */}
                     <div className="mb-4 flex items-center justify-between">
                         <span className="text-xs font-medium text-slate-500">AI Confidence</span>
@@ -268,6 +344,42 @@ const TaskApprovalModal = ({
                             <label htmlFor="createGithub" className="text-sm text-slate-700">
                                 Create GitHub issue
                             </label>
+                        </div>
+
+                        {/* Batch controls */}
+                        <div className="rounded-2xl border border-slate-200 bg-slate-50/60 p-4">
+                            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                                <div>
+                                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Batch actions</p>
+                                    <p className="text-xs text-slate-500">Affects {remainingTasks} unprocessed task{remainingTasks === 1 ? '' : 's'}</p>
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                    <button
+                                        onClick={handleRejectAll}
+                                        disabled={isLoading || remainingTasks === 0}
+                                        className="rounded-lg border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-50"
+                                    >
+                                        Reject All
+                                    </button>
+                                    <button
+                                        onClick={handleApproveAll}
+                                        disabled={isLoading || remainingTasks === 0}
+                                        className="rounded-lg bg-indigo-600 px-4 py-2 text-xs font-semibold text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+                                    >
+                                        Approve All
+                                    </button>
+                                </div>
+                            </div>
+                            <label className="mb-1 block text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                Rejection reason (optional)
+                            </label>
+                            <input
+                                type="text"
+                                value={batchReason}
+                                onChange={(e) => setBatchReason(e.target.value)}
+                                placeholder="Add context for reject-all"
+                                className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                            />
                         </div>
                     </div>
 

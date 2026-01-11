@@ -24,6 +24,7 @@ from app.api import (
 	zoom as zoom_routes,
 	zoom_sdk as zoom_sdk_routes,
 	zoom_webhook as zoom_webhook_routes,
+	zoom_ai as zoom_ai_routes,
 )
 
 # Configure logging
@@ -90,6 +91,7 @@ app.include_router(slack_routes.router)
 app.include_router(zoom_routes.router)
 app.include_router(zoom_sdk_routes.router)
 app.include_router(zoom_webhook_routes.router)
+app.include_router(zoom_ai_routes.router)
 
 
 @app.get('/health')

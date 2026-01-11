@@ -33,11 +33,9 @@ import AudioControl from "./pages/AudioControl";
 
 import { TaskApprovalProvider } from "./context/TaskApprovalContext";
 import TaskApprovalPopup from "./components/TaskApprovalPopup";
-import BotSpawner from "./components/BotSpawner";
 
-// Lazy-loaded Zoom components (heavy SDKs)
+// Lazy-loaded Zoom test page (for development/testing only)
 const ZoomTest = lazy(() => import("./pages/ZoomTest"));
-const ZoomBotClient = lazy(() => import("./pages/ZoomBotClient"));
 
 function App() {
   const setFromFirebase = useAuthStore((state) => state.setFromFirebase);
@@ -106,15 +104,6 @@ function App() {
             }
           />
           <Route path="/audio-control" element={<AudioControl />} />
-          {/* Hidden bot route - opened via window.open() */}
-          <Route
-            path="/bot/zoom/:meetingId"
-            element={
-              <Suspense fallback={<div>Loading bot...</div>}>
-                <ZoomBotClient />
-              </Suspense>
-            }
-          />
           <Route path="/dashboard" element={<DashboardLayout />}>
             <Route index element={<Navigate to="overview" replace />} />
             <Route path="overview" element={<Overview />} />
@@ -135,11 +124,10 @@ function App() {
 
         {/* Global task approval popup for managers */}
         <TaskApprovalPopup />
-        {/* Auto-spawn bot windows when meetings start */}
-        <BotSpawner />
       </BrowserRouter>
     </TaskApprovalProvider>
   );
 }
 
 export default App;
+

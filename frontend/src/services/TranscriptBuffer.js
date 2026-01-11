@@ -1,14 +1,15 @@
 /**
  * TranscriptBuffer - Manages transcript buffering with regex intent detection
- * and rate-limited Gemini calls for task extraction
+ * and rate-limited Groq (OpenAI-compatible) calls for task extraction
  */
 
-// Gemini API key from environment
-const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
-const GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent";
+// LLM API configuration (defaults keep backward compatibility)
+const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY || import.meta.env.VITE_GEMINI_API_KEY;
+const GROQ_MODEL = import.meta.env.VITE_GROQ_MODEL || "openai/gpt-oss-120b";
+const GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions";
 
-// Minimum time between Gemini calls (15 seconds for testing)
-const MIN_CALL_INTERVAL_MS = 20 * 1000;
+// Minimum time between Groq calls (30 seconds to avoid rate limiting)
+const MIN_CALL_INTERVAL_MS = 30 * 1000;
 
 // ============================================
 // REGEX PATTERNS FOR INTENT DETECTION
@@ -35,7 +36,7 @@ class TranscriptBuffer {
         this.buffer = []; // Array of { text: string, timestamp: number }
         this.lastLLMCallAt = 0;
         this.regexHitSinceLastCall = false;
-        this.isCallingGemini = false;
+        this.isCallingGemini = false; // Legacy field name retained for compatibility
     }
 
     /**
@@ -100,7 +101,7 @@ class TranscriptBuffer {
     }
 
     /**
-     * Check if conditions are met for calling Gemini
+     * Check if conditions are met for calling the Groq LLM (legacy method name)
      * @returns {{ canCall: boolean, reason: string }}
      */
     checkGeminiConditions() {
@@ -109,7 +110,7 @@ class TranscriptBuffer {
         const hasEnoughTime = timeSinceLastCall >= MIN_CALL_INTERVAL_MS;
 
         if (this.isCallingGemini) {
-            return { canCall: false, reason: "Gemini call already in progress" };
+            return { canCall: false, reason: "Groq call already in progress" };
         }
 
         if (!this.regexHitSinceLastCall) {
@@ -137,19 +138,19 @@ class TranscriptBuffer {
     }
 
     /**
-     * Call Gemini to extract task candidates
+     * Call Groq to extract task candidates (legacy method name kept for compatibility)
      * @returns {Promise<Object|null>}
      */
     async callGemini() {
         const conditions = this.checkGeminiConditions();
 
         if (!conditions.canCall) {
-            console.log(`[Gemini] Skipping: ${conditions.reason}`);
+            console.log(`[Groq] Skipping: ${conditions.reason}`);
             return null;
         }
 
-        if (!GEMINI_API_KEY) {
-            console.error("[Gemini] VITE_GEMINI_API_KEY is not set");
+        if (!GROQ_API_KEY) {
+            console.error("[Groq] VITE_GROQ_API_KEY is not set");
             return null;
         }
 
@@ -157,11 +158,10 @@ class TranscriptBuffer {
         const transcriptText = this.getBufferedText();
         const transcriptCount = this.buffer.length;
 
-        console.log(`%c[Gemini] 🚀 Calling with ${transcriptCount} transcripts (${transcriptText.length} chars)`, "font-weight: bold; color: #fbbf24;");
+        console.log(`%c[Groq] 🚀 Calling with ${transcriptCount} transcripts (${transcriptText.length} chars)`, "font-weight: bold; color: #fbbf24;");
 
-        const prompt = `You are a meeting assistant that extracts actionable tasks from meeting transcripts.
-
-Analyze the following meeting transcript and extract any tasks, action items, or assignments mentioned.
+        const systemPrompt = "You are a meeting assistant that extracts actionable tasks from meeting transcripts.";
+        const userPrompt = `Analyze the following meeting transcript and extract any tasks, action items, or assignments mentioned.
 
 TRANSCRIPT:
 """
@@ -187,32 +187,41 @@ Extract tasks in the following STRICT JSON format. Return ONLY valid JSON, no ma
 If no clear tasks are found, return: {"tasks": [], "summary": "No clear tasks identified"}`;
 
         try {
-            const response = await fetch(`${GEMINI_API_URL}?key=${GEMINI_API_KEY}`, {
+            const response = await fetch(GROQ_API_URL, {
                 method: "POST",
                 headers: {
-                    "Content-Type": "application/json"
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${GROQ_API_KEY}`
                 },
                 body: JSON.stringify({
-                    contents: [{
-                        parts: [{
-                            text: prompt
-                        }]
-                    }],
-                    generationConfig: {
-                        temperature: 0.2,
-                        topP: 0.8,
-                        topK: 40,
-                        maxOutputTokens: 4096  // Increased to prevent truncation
-                    }
+                    model: GROQ_MODEL,
+                    messages: [
+                        { role: "system", content: systemPrompt },
+                        { role: "user", content: userPrompt }
+                    ],
+                    temperature: 0.2,
+                    top_p: 0.8,
+                    max_tokens: 1024
                 })
             });
 
             if (!response.ok) {
-                throw new Error(`Gemini API error: ${response.status}`);
+                throw new Error(`Groq API error: ${response.status}`);
             }
 
             const data = await response.json();
-            const textResponse = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+            const messageContent = data?.choices?.[0]?.message?.content;
+            let textResponse = "";
+            if (Array.isArray(messageContent)) {
+                textResponse = messageContent
+                    .map(part => (typeof part === "string" ? part : part?.text || ""))
+                    .join(" ")
+                    .trim();
+            } else if (typeof messageContent === "string") {
+                textResponse = messageContent;
+            } else if (messageContent && typeof messageContent === "object") {
+                textResponse = messageContent?.text || "";
+            }
 
             // Parse JSON from response
             let result;
@@ -232,33 +241,20 @@ If no clear tasks are found, return: {"tasks": [], "summary": "No clear tasks id
                         result = JSON.parse(jsonMatch[0]);
                     } catch (innerError) {
                         // If JSON is truncated, try to fix it
-                        console.warn("[Gemini] JSON appears truncated, attempting repair...");
-                        let fixedJson = jsonMatch[0];
+                        console.warn("[Groq] JSON appears truncated, attempting repair...");
+                        const fixedJson = jsonMatch[0];
 
-                        // Count open/close braces and brackets
-                        const openBraces = (fixedJson.match(/\{/g) || []).length;
-                        const closeBraces = (fixedJson.match(/\}/g) || []).length;
-                        const openBrackets = (fixedJson.match(/\[/g) || []).length;
-                        const closeBrackets = (fixedJson.match(/\]/g) || []).length;
-
-                        // Try to close unclosed structures
                         // First, try to find the last complete task and truncate there
-                        const tasksMatch = fixedJson.match(/"tasks"\s*:\s*\[/);
-                        if (tasksMatch) {
-                            // Find all complete task objects
-                            const taskPattern = /\{\s*"title"\s*:\s*"[^"]*"\s*,\s*"description"\s*:\s*"[^"]*"\s*,\s*"assignee"\s*:\s*"[^"]*"\s*,\s*"priority"\s*:\s*"[^"]*"\s*,\s*"deadline"\s*:\s*"[^"]*"\s*,\s*"confidence"\s*:\s*[\d.]+\s*\}/g;
-                            const completeTasks = fixedJson.match(taskPattern);
+                        const taskPattern = /\{\s*"title"\s*:\s*"[^"]*"\s*,\s*"description"\s*:\s*"[^"]*"\s*,\s*"assignee"\s*:\s*"[^"]*"\s*,\s*"priority"\s*:\s*"[^"]*"\s*,\s*"deadline"\s*:\s*"[^"]*"\s*,\s*"confidence"\s*:\s*[\d.]+\s*\}/g;
+                        const completeTasks = fixedJson.match(taskPattern);
 
-                            if (completeTasks && completeTasks.length > 0) {
-                                // Reconstruct with only complete tasks
-                                result = {
-                                    tasks: completeTasks.map(taskStr => JSON.parse(taskStr)),
-                                    summary: "Partial response - some tasks may be missing"
-                                };
-                                console.log(`[Gemini] Recovered ${completeTasks.length} complete task(s) from truncated response`);
-                            } else {
-                                throw innerError;
-                            }
+                        if (completeTasks && completeTasks.length > 0) {
+                            // Reconstruct with only complete tasks
+                            result = {
+                                tasks: completeTasks.map(taskStr => JSON.parse(taskStr)),
+                                summary: "Partial response - some tasks may be missing"
+                            };
+                            console.log(`[Groq] Recovered ${completeTasks.length} complete task(s) from truncated response`);
                         } else {
                             throw innerError;
                         }
@@ -267,13 +263,13 @@ If no clear tasks are found, return: {"tasks": [], "summary": "No clear tasks id
                     throw new Error("No JSON found in response");
                 }
             } catch (parseError) {
-                console.error("[Gemini] Failed to parse response:", parseError);
-                console.log("[Gemini] Raw response:", textResponse.substring(0, 500) + "...");
+                console.error("[Groq] Failed to parse response:", parseError);
+                console.log("[Groq] Raw response:", textResponse.substring(0, 500) + "...");
                 result = { tasks: [], summary: "Failed to parse response", error: parseError.message };
             }
 
             // Log the structured task candidates
-            console.log("%c[Gemini] ✅ Task Candidates:", "font-weight: bold; color: #4ade80;");
+            console.log("%c[Groq] ✅ Task Candidates:", "font-weight: bold; color: #4ade80;");
             console.log(JSON.stringify(result, null, 2));
 
             if (result.tasks && result.tasks.length > 0) {
@@ -294,19 +290,26 @@ If no clear tasks are found, return: {"tasks": [], "summary": "No clear tasks id
             this.buffer = [];
             this.isCallingGemini = false;
 
-            console.log("[Buffer] State reset after Gemini call");
+            console.log("[Buffer] State reset after Groq call");
 
             return result;
 
         } catch (error) {
-            console.error("[Gemini] API call failed:", error);
+            console.error("[Groq] API call failed:", error);
+
+            // IMPORTANT: Set lastLLMCallAt on failure too, to prevent immediate retry loop
+            // Add extra cooldown on failure (exponential backoff)
+            const backoffMs = error.message?.includes('429') ? 60000 : 30000; // 60s for rate limit, 30s for other errors
+            this.lastLLMCallAt = Date.now() + backoffMs - MIN_CALL_INTERVAL_MS; // Effectively add backoff time
             this.isCallingGemini = false;
+
+            console.log(`[Groq] Backing off for ${backoffMs / 1000}s after error`);
             return null;
         }
     }
 
     /**
-     * Force check and potentially call Gemini
+     * Force check and potentially call Groq (legacy name kept)
      * @returns {Promise<Object|null>}
      */
     async tryCallGemini() {
@@ -333,7 +336,7 @@ If no clear tasks are found, return: {"tasks": [], "summary": "No clear tasks id
     }
 
     /**
-     * Clear the buffer without calling Gemini
+     * Clear the buffer without calling Groq
      */
     clear() {
         this.buffer = [];

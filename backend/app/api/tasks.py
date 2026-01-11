@@ -77,6 +77,35 @@ class TaskRejectResponse(BaseModel):
 	rejected: bool
 
 
+class TaskBulkEditEntry(BaseModel):
+	taskIndex: int = Field(..., ge=0)
+	edits: TaskCandidateEdit | None = None
+
+
+class TaskApproveBatchRequest(BaseModel):
+	pendingId: str = Field(..., min_length=1)
+	edits: List[TaskBulkEditEntry] | None = None
+	createGithubIssue: bool = False
+
+
+class TaskApproveBatchResponse(BaseModel):
+	pendingId: str
+	approvedTaskIds: List[str]
+	remaining: int
+
+
+class TaskRejectBatchRequest(BaseModel):
+	pendingId: str = Field(..., min_length=1)
+	taskIndexes: List[int] | None = None
+	reason: str | None = None
+
+
+class TaskRejectBatchResponse(BaseModel):
+	pendingId: str
+	rejectedCount: int
+	remaining: int
+
+
 class TaskCandidate(BaseModel):
 	title: str | None = None
 	description: str | None = None
@@ -183,6 +212,32 @@ async def approve_task(
 	return TaskApproveResponse(**result)
 
 
+@router.post('/approve/batch', response_model=TaskApproveBatchResponse)
+async def approve_tasks_batch(
+	request: TaskApproveBatchRequest,
+	current_user: dict = Depends(get_current_user),
+):
+	"""Approve all pending candidates (optionally with edits) in a single action."""
+	edits_map: dict[int, dict] = {}
+	if request.edits:
+		for entry in request.edits:
+			if entry.edits:
+				edits_map[entry.taskIndex] = {
+					k: v
+					for k, v in entry.edits.model_dump().items()
+					if v is not None
+				}
+
+	result = await task_approval_service.approve_all_tasks(
+		pending_id=request.pendingId,
+		user_id=current_user.get('uid'),
+		user_email=current_user.get('email'),
+		edits_by_index=edits_map,
+		create_github_issue=request.createGithubIssue,
+	)
+	return TaskApproveBatchResponse(**result)
+
+
 @router.post('/reject', response_model=TaskRejectResponse)
 async def reject_task(
 	request: TaskRejectRequest,
@@ -201,6 +256,21 @@ async def reject_task(
 		reason=request.reason,
 	)
 	return TaskRejectResponse(**result)
+
+
+@router.post('/reject/batch', response_model=TaskRejectBatchResponse)
+async def reject_tasks_batch(
+	request: TaskRejectBatchRequest,
+	current_user: dict = Depends(get_current_user),
+):
+	"""Reject multiple pending candidates at once."""
+	result = await task_approval_service.reject_all_tasks(
+		pending_id=request.pendingId,
+		user_id=current_user.get('uid'),
+		reason=request.reason,
+		task_indexes=request.taskIndexes,
+	)
+	return TaskRejectBatchResponse(**result)
 
 
 @router.get('/pending', response_model=List[PendingApproval])

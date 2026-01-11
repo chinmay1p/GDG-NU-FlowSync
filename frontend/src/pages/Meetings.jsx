@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useOutletContext } from 'react-router-dom'
 import CreateMeetingModal from '../components/meetings/CreateMeetingModal'
-import { createMeeting, fetchMeetings } from '../services/meetingApi'
+import MeetingDetailPanel from '../components/meetings/MeetingDetailPanel'
+import MeetingCaptureModal from '../components/meetings/MeetingCaptureModal'
+import { createMeeting, fetchMeetings, fetchMeetingTranscript, fetchMeetingSummary, fetchMeetingDetail, deleteMeeting } from '../services/meetingApi'
 import { isAdmin, isManager } from '../utils/dashboardRoutes'
 
 const statusStyles = {
@@ -9,6 +11,14 @@ const statusStyles = {
 	ACTIVE: 'bg-emerald-100 text-emerald-700',
 	ENDED: 'bg-slate-200 text-slate-600',
 }
+
+const statusLabels = {
+	SCHEDULED: 'Scheduled',
+	ACTIVE: 'Active',
+	ENDED: 'Ended',
+}
+
+const STALE_MEETING_THRESHOLD_MS = 24 * 60 * 60 * 1000 // 24 hours
 
 const Meetings = () => {
 	const { context } = useOutletContext()
@@ -39,6 +49,14 @@ const Meetings = () => {
 	const [error, setError] = useState(null)
 	const [isModalOpen, setModalOpen] = useState(false)
 	const [latestMeeting, setLatestMeeting] = useState(null)
+	const [selectedMeeting, setSelectedMeeting] = useState(null)
+	const [meetingSummary, setMeetingSummary] = useState(null)
+	const [meetingTranscript, setMeetingTranscript] = useState(null)
+	const [detailLoading, setDetailLoading] = useState(false)
+	const [detailError, setDetailError] = useState(null)
+	const [deletingMeetingId, setDeletingMeetingId] = useState(null)
+	const [isCaptureOpen, setIsCaptureOpen] = useState(false) // Universal capture modal (new meeting)
+	const [captureMeeting, setCaptureMeeting] = useState(null) // Capture for specific meeting
 
 	const loadMeetings = useCallback(async () => {
 		if (!canViewMeetings) return
@@ -66,6 +84,34 @@ const Meetings = () => {
 		return created
 	}
 
+	const openMeetingDetail = async (meeting) => {
+		if (!meeting?.meetingId) return
+		setSelectedMeeting(meeting)
+		setDetailLoading(true)
+		setDetailError(null)
+		try {
+			const [detail, summaryData, transcriptData] = await Promise.all([
+				fetchMeetingDetail(meeting.meetingId).catch(() => meeting),
+				fetchMeetingSummary(meeting.meetingId).catch(() => ({ generated: false })),
+				fetchMeetingTranscript(meeting.meetingId).catch(() => ({ segments: [] })),
+			])
+			setSelectedMeeting(mergeMeetingDetail(meeting, detail))
+			setMeetingSummary(summaryData)
+			setMeetingTranscript(transcriptData)
+		} catch (err) {
+			setDetailError(err.message || 'Failed to load meeting detail')
+		} finally {
+			setDetailLoading(false)
+		}
+	}
+
+	const closeMeetingDetail = () => {
+		setSelectedMeeting(null)
+		setMeetingSummary(null)
+		setMeetingTranscript(null)
+		setDetailError(null)
+	}
+
 	if (!canViewMeetings) {
 		return (
 			<div className="min-h-screen bg-slate-50 px-6 py-10">
@@ -84,6 +130,24 @@ const Meetings = () => {
 		return Number.isNaN(date.getTime()) ? '—' : date.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
 	}
 
+	const handleDeleteMeeting = async (meetingId) => {
+		if (!meetingId || !adminUser) return
+		const confirmed = window.confirm('Delete this meeting for everyone? This removes transcripts and summaries permanently.')
+		if (!confirmed) return
+		setDeletingMeetingId(meetingId)
+		try {
+			await deleteMeeting(meetingId)
+			if (selectedMeeting?.meetingId === meetingId) {
+				closeMeetingDetail()
+			}
+			await loadMeetings()
+		} catch (err) {
+			setError(err.message || 'Failed to delete meeting')
+		} finally {
+			setDeletingMeetingId(null)
+		}
+	}
+
 	return (
 		<div className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-white px-6 py-10">
 			<div className="mx-auto max-w-6xl space-y-6">
@@ -94,6 +158,14 @@ const Meetings = () => {
 						<p className="text-sm text-slate-600">Track, schedule, and monitor Zoom sessions for every team.</p>
 					</div>
 					<div className="flex flex-wrap gap-3">
+						{/* Universal Audio Capture Button */}
+						<button
+							onClick={() => setIsCaptureOpen(true)}
+							className="rounded-full bg-gradient-to-r from-indigo-500 to-purple-600 px-5 py-2 text-sm font-semibold text-white hover:from-indigo-600 hover:to-purple-700 shadow-md hover:shadow-lg transition-all flex items-center gap-2"
+						>
+							<span>🎙️</span>
+							Start Capture
+						</button>
 						<button
 							onClick={loadMeetings}
 							className="rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-600 hover:border-slate-500"
@@ -172,46 +244,131 @@ const Meetings = () => {
 									</tr>
 								)}
 								{meetings.map((meeting) => {
-									const statusKey = (meeting.status || '').toUpperCase()
-									const statusLabel = statusKey === 'ACTIVE' ? 'Active' : statusKey === 'ENDED' ? 'Ended' : 'Scheduled'
+									const statusKey = deriveStatusKey(meeting)
+									const statusLabel = statusLabels[statusKey] || 'Scheduled'
 									return (
-									<tr key={meeting.meetingId}>
-										<td className="px-6 py-4">
-											<p className="font-semibold text-slate-900">{meeting.topic || 'Zoom meeting'}</p>
-											<p className="text-xs text-slate-500">ID: {meeting.zoomMeetingId || '—'}</p>
-										</td>
-										<td className="px-6 py-4 text-slate-600">{resolveTeamName(meeting.teamId, teamDirectory)}</td>
-										<td className="px-6 py-4">
+										<tr key={meeting.meetingId}>
+											<td className="px-6 py-4">
+												<p className="font-semibold text-slate-900">{meeting.topic || 'Zoom meeting'}</p>
+												<p className="text-xs text-slate-500">ID: {meeting.zoomMeetingId || '—'}</p>
+											</td>
+											<td className="px-6 py-4 text-slate-600">{resolveTeamName(meeting.teamId, teamDirectory)}</td>
+											<td className="px-6 py-4">
 												<span className={`rounded-full px-3 py-1 text-xs font-semibold ${statusStyles[statusKey] || 'bg-slate-100 text-slate-700'}`}>
 													{statusLabel}
 												</span>
-										</td>
-										<td className="px-6 py-4 text-slate-600">{formatDate(meeting.startTime)}</td>
-										<td className="px-6 py-4">
-											<div className="flex flex-wrap gap-2">
-												{meeting.joinUrl && (
-													<a href={meeting.joinUrl} target="_blank" rel="noreferrer" className="rounded-full border border-slate-300 px-3 py-1 text-xs font-semibold text-slate-600 hover:border-slate-500">
-														Join
-													</a>
-												)}
-												{meeting.startUrl && canSchedule && (
-													<a href={meeting.startUrl} target="_blank" rel="noreferrer" className="rounded-full border border-slate-900 px-3 py-1 text-xs font-semibold text-slate-900 hover:bg-slate-50">
-														Host
-													</a>
-												)}
-											</div>
-										</td>
-									</tr>
-										)
-									})}
+											</td>
+											<td className="px-6 py-4 text-slate-600">{formatDate(meeting.startTime)}</td>
+											<td className="px-6 py-4">
+												<div className="flex flex-wrap gap-2">
+													{meeting.joinUrl && (
+														<a href={meeting.joinUrl} target="_blank" rel="noreferrer" className="rounded-full border border-slate-300 px-3 py-1 text-xs font-semibold text-slate-600 hover:border-slate-500">
+															Join
+														</a>
+													)}
+													{meeting.startUrl && canSchedule && (
+														<a href={meeting.startUrl} target="_blank" rel="noreferrer" className="rounded-full border border-slate-900 px-3 py-1 text-xs font-semibold text-slate-900 hover:bg-slate-50">
+															Host
+														</a>
+													)}
+													{/* Capture Button for this meeting */}
+													<button
+														onClick={() => setCaptureMeeting(meeting)}
+														className="rounded-full bg-gradient-to-r from-indigo-500 to-purple-600 px-3 py-1 text-xs font-semibold text-white hover:from-indigo-600 hover:to-purple-700 shadow-sm"
+													>
+														🎙️ Capture
+													</button>
+													<button
+														onClick={() => openMeetingDetail(meeting)}
+														className="rounded-full border border-indigo-200 px-3 py-1 text-xs font-semibold text-indigo-700 hover:border-indigo-500"
+													>
+														Details
+													</button>
+													{adminUser && (
+														<button
+															onClick={() => handleDeleteMeeting(meeting.meetingId)}
+															disabled={deletingMeetingId === meeting.meetingId}
+															className="rounded-full border border-rose-200 px-3 py-1 text-xs font-semibold text-rose-700 hover:border-rose-400 disabled:opacity-60"
+														>
+															{deletingMeetingId === meeting.meetingId ? 'Deleting…' : 'Delete'}
+														</button>
+													)}
+												</div>
+											</td>
+										</tr>
+									)
+								})}
 							</tbody>
 						</table>
 					</div>
 				</section>
 			</div>
 			{canSchedule && <CreateMeetingModal open={isModalOpen} onClose={() => setModalOpen(false)} teams={schedulerTeams} onCreate={handleCreateMeeting} />}
+			{selectedMeeting && (
+				<MeetingDetailPanel
+					meeting={selectedMeeting}
+					summary={meetingSummary}
+					transcript={meetingTranscript}
+					isLoading={detailLoading}
+					error={detailError}
+					onClose={closeMeetingDetail}
+				/>
+			)}
+			{/* Universal Audio Capture Modal (New Meeting) */}
+			<MeetingCaptureModal
+				meeting={null}
+				isOpen={isCaptureOpen}
+				onClose={() => setIsCaptureOpen(false)}
+				onMeetingCreated={loadMeetings}
+				teams={schedulerTeams}
+			/>
+			{/* Per-Meeting Capture Modal (Existing Meeting) */}
+			{captureMeeting && (
+				<MeetingCaptureModal
+					meeting={captureMeeting}
+					isOpen={!!captureMeeting}
+					onClose={() => setCaptureMeeting(null)}
+					onMeetingCreated={loadMeetings}
+					teams={schedulerTeams}
+				/>
+			)}
 		</div>
 	)
+}
+
+const deriveStatusKey = (meeting) => {
+	const rawStatus = (meeting.status || 'SCHEDULED').toUpperCase()
+	if (rawStatus === 'COMPLETED' || rawStatus === 'ENDED') {
+		return 'ENDED'
+	}
+
+	const explicitEnd = meeting.endTime || meeting.endedAt || meeting.completedAt
+	if (explicitEnd) {
+		const endMs = new Date(explicitEnd).getTime()
+		if (!Number.isNaN(endMs)) {
+			return 'ENDED'
+		}
+	}
+
+	const startReference = meeting.startTime || meeting.startedAt
+	if (startReference) {
+		const startMs = new Date(startReference).getTime()
+		if (!Number.isNaN(startMs) && Date.now() - startMs > STALE_MEETING_THRESHOLD_MS) {
+			return 'ENDED'
+		}
+	}
+
+	return rawStatus
+}
+
+const mergeMeetingDetail = (baseMeeting, detail) => {
+	if (!detail) {
+		return baseMeeting
+	}
+	const sanitizedDetail = Object.fromEntries(
+		Object.entries(detail).filter(([, value]) => value !== undefined && value !== null),
+	)
+	return { ...baseMeeting, ...sanitizedDetail }
 }
 
 const resolveTeamName = (teamId, teams) => {

@@ -1,13 +1,15 @@
 """
 Meetings API - Endpoints for meeting management, transcripts, and summaries.
 """
-from typing import Optional, List
+import time
+from typing import Optional, List, Literal
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.core.security import get_current_user
 from app.services.meeting_transcript_service import meeting_transcript_service
 from app.services.zoom_service import zoom_service
+from app.services.task_approval_service import task_approval_service
 
 router = APIRouter(prefix='/meetings', tags=['meetings'])
 
@@ -80,6 +82,11 @@ class EndMeetingResponse(BaseModel):
     summaryGenerated: bool = False
 
 
+class DeleteMeetingResponse(BaseModel):
+    meetingId: str
+    deleted: bool = True
+
+
 class AppendTranscriptRequest(BaseModel):
     text: str
     timestamp: int
@@ -90,6 +97,26 @@ class AppendTranscriptResponse(BaseModel):
     success: bool
     segmentCount: int = 0
 
+
+class DetectedTaskItem(BaseModel):
+    title: str = Field(..., min_length=3, max_length=200)
+    description: str | None = Field(default=None, max_length=4000)
+    assignee: str | None = Field(default=None, max_length=320)
+    priority: Literal['low', 'medium', 'high'] = 'medium'
+    deadline: str | None = Field(default=None, max_length=320)
+    confidence: float | None = Field(default=None, ge=0.0, le=1.0)
+
+
+class SubmitTasksRequest(BaseModel):
+    tasks: List[DetectedTaskItem] = Field(..., min_length=1)
+    summary: str | None = None
+
+
+class SubmitTasksResponse(BaseModel):
+    sent: bool
+    pendingId: str | None = None
+    managersNotified: int = 0
+    message: str | None = None
 
 # ==========================================
 # MEETING LIFECYCLE ENDPOINTS
@@ -132,6 +159,23 @@ async def end_meeting(
     return result
 
 
+@router.delete('/{meeting_id}', response_model=DeleteMeetingResponse)
+async def delete_meeting(
+    meeting_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """Delete a meeting and all of its stored artifacts (admin only)."""
+    membership = await _get_org_membership(current_user)
+    if membership.get('role') != 'ORG_ADMIN':
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail='Only organization admins can delete meetings')
+
+    result = await meeting_transcript_service.delete_meeting(
+        meeting_id=meeting_id,
+        org_id=membership['orgId'],
+    )
+    return result
+
+
 # ==========================================
 # TRANSCRIPT ENDPOINTS
 # ==========================================
@@ -169,6 +213,73 @@ async def get_transcript(
         org_id=org_id,
     )
     return result
+
+
+# ==========================================
+# TASK DETECTION ENDPOINTS
+# ==========================================
+
+@router.post('/{meeting_id}/tasks', response_model=SubmitTasksResponse)
+async def submit_detected_tasks(
+    meeting_id: str,
+    request: SubmitTasksRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    """Submit detected tasks for approval. Emits TASK_DETECTED to managers."""
+    member_data = await _get_org_membership(current_user)
+    org_id = member_data.get('orgId')
+    
+    # Get meeting to find the team
+    meeting_data = await meeting_transcript_service.get_meeting(
+        meeting_id=meeting_id,
+        user_id=current_user.get('uid'),
+        org_id=org_id,
+    )
+    
+    if not meeting_data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Meeting not found")
+    
+    team_id = meeting_data.get('teamId')
+    
+    # Normalize tasks
+    normalized_tasks = []
+    now_ms = int(time.time() * 1000)
+    
+    for task in request.tasks:
+        title = (task.title or '').strip()
+        if not title:
+            continue
+            
+        normalized_tasks.append({
+            'title': title,
+            'description': (task.description or '').strip(),
+            'assignee': (task.assignee or '').strip(),
+            'priority': (task.priority or 'medium').lower(),
+            'deadline': task.deadline,
+            'confidence': task.confidence,
+            'detectedAt': now_ms,
+        })
+    
+    if not normalized_tasks:
+        return SubmitTasksResponse(
+            sent=False,
+            message="No valid tasks provided"
+        )
+    
+    # Emit to managers via WebSocket
+    result = await task_approval_service.emit_task_detected(
+        meeting_id=meeting_id,
+        team_id=team_id,
+        org_id=org_id,
+        task_candidates=normalized_tasks,
+    )
+    
+    return SubmitTasksResponse(
+        sent=result.get('sent', False),
+        pendingId=result.get('pendingId'),
+        managersNotified=result.get('managersNotified', 0),
+        message=f"Tasks submitted. {result.get('managersNotified', 0)} managers notified."
+    )
 
 
 # ==========================================
@@ -249,6 +360,12 @@ async def get_meeting(
 
 async def _get_user_org_id(current_user: dict) -> str:
     """Get the organization ID for the current user."""
+    member_data = await _get_org_membership(current_user)
+    return member_data['orgId']
+
+
+async def _get_org_membership(current_user: dict) -> dict:
+    """Fetch the org membership document for the current user."""
     from firebase_admin import firestore
     from app.core.security import ensure_firebase_initialized
     
@@ -276,4 +393,4 @@ async def _get_user_org_id(current_user: dict) -> str:
             detail="Organization membership is invalid"
         )
     
-    return org_id
+    return member_data

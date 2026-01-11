@@ -1,5 +1,6 @@
 import {
 	createUserWithEmailAndPassword,
+	getRedirectResult,
 	GoogleAuthProvider,
 	signInWithEmailAndPassword,
 	signInWithPopup,

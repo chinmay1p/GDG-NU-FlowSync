@@ -52,6 +52,17 @@ export const approveTask = async (pendingId, taskIndex, edits = null, createGith
 	})
 }
 
+export const approveTasksBatch = async (pendingId, edits = [], createGithubIssue = false) => {
+	return authedRequest('/tasks/approve/batch', {
+		method: 'POST',
+		body: JSON.stringify({
+			pendingId,
+			edits,
+			createGithubIssue,
+		}),
+	})
+}
+
 /**
  * Reject an AI-detected task candidate (managers only)
  * @param {string} pendingId - The pending approval ID
@@ -64,6 +75,17 @@ export const rejectTask = async (pendingId, taskIndex, reason = null) => {
 		body: JSON.stringify({
 			pendingId,
 			taskIndex,
+			reason,
+		}),
+	})
+}
+
+export const rejectTasksBatch = async (pendingId, taskIndexes = null, reason = null) => {
+	return authedRequest('/tasks/reject/batch', {
+		method: 'POST',
+		body: JSON.stringify({
+			pendingId,
+			taskIndexes,
 			reason,
 		}),
 	})

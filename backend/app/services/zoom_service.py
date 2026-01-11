@@ -147,6 +147,7 @@ class ZoomService:
 		client = self._get_client()
 		meeting_ref = client.collection('meetings').document()
 		meeting_id = meeting_ref.id
+		now_iso = datetime.now(timezone.utc).isoformat()
 		doc = {
 			'meetingId': meeting_id,
 			'zoomMeetingId': zoom_meeting_id,
@@ -163,7 +164,8 @@ class ZoomService:
 		}
 		meeting_ref.set(doc)
 		logger.info('Zoom meeting %s created (zoom id=%s) for org %s team %s', meeting_id, zoom_meeting_id, org_id, team_id)
-		return doc
+		# Return a serializable version (with ISO string instead of SERVER_TIMESTAMP)
+		return {**doc, 'createdAt': now_iso}
 
 	@staticmethod
 	def _serialize_timestamp(value):

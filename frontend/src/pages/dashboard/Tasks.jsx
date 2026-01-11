@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import useAuthStore from '../../store/authStore'
 import useUserContext from '../../hooks/useUserContext'
 import { isAdmin, isManager } from '../../utils/dashboardRoutes'
@@ -82,6 +82,7 @@ const Tasks = () => {
 	const [completingTaskId, setCompletingTaskId] = useState(null)
 	const [completionMessage, setCompletionMessage] = useState(null)
 	const [githubRepositories, setGithubRepositories] = useState([])
+	const latestTasksRequestRef = useRef(0)
 
 	const canManage = useMemo(() => isAdmin(context) || isManager(context), [context])
 	const userEmail = (user?.email || '').toLowerCase()
@@ -111,14 +112,25 @@ const Tasks = () => {
 		if (!user || !context) return
 		setLoading(true)
 		setError(null)
+		const requestId = latestTasksRequestRef.current + 1
+		latestTasksRequestRef.current = requestId
 		try {
 			const data = await fetchTasks(deriveQueryFromFilters())
-			setTasks(data)
-			setLastGoodTasks(data)
+			if (requestId !== latestTasksRequestRef.current) {
+				return
+			}
+			const normalized = Array.isArray(data) ? data : []
+			setTasks(normalized)
+			setLastGoodTasks(normalized)
 		} catch (err) {
+			if (requestId !== latestTasksRequestRef.current) {
+				return
+			}
 			setError(err.message || 'Unable to load tasks')
 		} finally {
-			setLoading(false)
+			if (requestId === latestTasksRequestRef.current) {
+				setLoading(false)
+			}
 		}
 	}, [user, context, deriveQueryFromFilters])
 
