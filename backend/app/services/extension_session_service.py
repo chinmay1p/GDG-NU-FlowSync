@@ -12,16 +12,17 @@ logger = logging.getLogger(__name__)
 
 
 class ExtensionSessionService:
-	"""Manages one-time session tokens shared with the Chrome extension."""
 
 	COLLECTION_NAME = 'extension_sessions'
 	MEMBERS_COLLECTION = 'org_members'
 	DEFAULT_TTL_HOURS = 24
 
+	# Initializes the service with a configurable session TTL.
 	def __init__(self, ttl_hours: int = DEFAULT_TTL_HOURS) -> None:
 		self.ttl_hours = ttl_hours
 		ensure_firebase_initialized()
 
+	# Creates a new extension session for a user in an organization.
 	async def create_session(self, *, uid: str | None, email: str | None, org_id: str | None) -> dict:
 		if not uid:
 			raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Missing user id')
@@ -30,12 +31,14 @@ class ExtensionSessionService:
 
 		return await asyncio.to_thread(self._create_session_sync, uid, email or '', org_id)
 
+	# Verifies a session ID and returns user info if valid.
 	async def verify_session(self, session_id: str | None) -> dict:
 		if not session_id:
 			raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Session id is required')
 
 		return await asyncio.to_thread(self._verify_session_sync, session_id)
 
+	# Synchronously creates and stores a session document in Firestore.
 	def _create_session_sync(self, uid: str, email: str, org_id: str) -> dict:
 		client = self._get_client()
 		member_ref = client.collection(self.MEMBERS_COLLECTION).document(f'{org_id}_{uid}')
@@ -66,6 +69,7 @@ class ExtensionSessionService:
 			'expiresAt': expires_at,
 		}
 
+	# Synchronously verifies a session by checking existence, expiry, and revocation.
 	def _verify_session_sync(self, session_id: str) -> dict:
 		client = self._get_client()
 		doc_ref = client.collection(self.COLLECTION_NAME).document(session_id)
@@ -95,6 +99,7 @@ class ExtensionSessionService:
 			'orgId': org_id,
 		}
 
+	# Returns the Firestore client instance.
 	@staticmethod
 	def _get_client():
 		ensure_firebase_initialized()
@@ -102,6 +107,4 @@ class ExtensionSessionService:
 
 
 default_extension_session_service = ExtensionSessionService()
-
-# Alias used by routes
 extension_session_service = default_extension_session_service

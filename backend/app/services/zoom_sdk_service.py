@@ -13,17 +13,18 @@ ZOOM_APP_CLIENT_SECRET = os.getenv('ZOOM_APP_CLIENT_SECRET')
 
 
 class ZoomSDKService:
-	"""Generate Meeting SDK signatures using Zoom OAuth credentials."""
 
 	ALGORITHM = 'HS256'
 	TOKEN_TTL_SECONDS = 120
 
+	# Initializes the service with Zoom OAuth credentials from environment.
 	def __init__(self) -> None:
 		if not ZOOM_APP_CLIENT_ID or not ZOOM_APP_CLIENT_SECRET:
 			logger.warning('Zoom SDK environment variables are not configured. Signatures cannot be generated.')
 		self._client_id = ZOOM_APP_CLIENT_ID
 		self._client_secret = ZOOM_APP_CLIENT_SECRET
 
+	# Generates a JWT signature for Zoom Meeting SDK authentication.
 	def generate_signature(self, *, meeting_number: str, role: int) -> str:
 		meeting_id = (meeting_number or '').strip()
 		if not meeting_id:

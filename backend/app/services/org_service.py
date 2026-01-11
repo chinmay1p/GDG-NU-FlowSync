@@ -12,14 +12,15 @@ logger = logging.getLogger(__name__)
 
 
 class OrgService:
-	"""Service layer for creating and joining organizations."""
 
 	CODE_LENGTH = 6
 	MAX_CODE_ATTEMPTS = 20
 
+	# Initializes the organization service and ensures Firebase is ready.
 	def __init__(self) -> None:
 		ensure_firebase_initialized()
 
+	# Creates a new organization with the user as admin.
 	async def create_organization(self, *, uid: str, email: str | None, name: str, description: str | None) -> Dict[str, str]:
 		if not uid:
 			raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Missing user id')
@@ -40,6 +41,7 @@ class OrgService:
 			normalized_description,
 		)
 
+	# Joins an existing organization using a join code.
 	async def join_organization(self, *, uid: str, email: str | None, join_code: str) -> Dict[str, str]:
 		if not uid:
 			raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Missing user id')
@@ -52,6 +54,7 @@ class OrgService:
 
 		return await asyncio.to_thread(self._join_org_sync, uid, email, normalized_code)
 
+	# Synchronously creates the organization and admin membership in Firestore.
 	def _create_org_sync(self, uid: str, email: str, name: str, description: str) -> Dict[str, str]:
 		client = self._get_client()
 		orgs_collection = client.collection('organizations')
@@ -87,6 +90,7 @@ class OrgService:
 		logger.info('Organization %s created by %s', org_id, uid)
 		return {'orgId': org_id, 'joinCode': join_code}
 
+	# Synchronously adds a user as member to an organization via join code.
 	def _join_org_sync(self, uid: str, email: str, join_code: str) -> Dict[str, str]:
 		client = self._get_client()
 		orgs_collection = client.collection('organizations')
@@ -116,12 +120,14 @@ class OrgService:
 		logger.info('User %s joined organization %s via join code', uid, org_id)
 		return {'orgId': org_id, 'role': 'MEMBER'}
 
+	# Normalizes text by collapsing whitespace.
 	@staticmethod
 	def _normalize_text(value: str | None) -> str:
 		if value is None:
 			return ''
 		return ' '.join(value.split())
 
+	# Generates a unique numeric join code for an organization.
 	def _generate_unique_join_code(self, orgs_collection) -> str:
 		for _ in range(self.MAX_CODE_ATTEMPTS):
 			code = f'{random.randint(0, 10**self.CODE_LENGTH - 1):0{self.CODE_LENGTH}d}'
@@ -129,6 +135,7 @@ class OrgService:
 				return code
 		raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail='Unable to generate join code. Please retry.')
 
+	# Returns the Firestore client instance.
 	@staticmethod
 	def _get_client():
 		ensure_firebase_initialized()
@@ -136,6 +143,4 @@ class OrgService:
 
 
 default_org_service = OrgService()
-
-# Alias used by routes
 org_service = default_org_service

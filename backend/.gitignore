@@ -1,3 +1,4 @@
 .env
 firebase_service_account.json
+firebase_service_account(1).json
 .venv

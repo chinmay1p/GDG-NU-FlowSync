@@ -12,18 +12,20 @@ logger = logging.getLogger(__name__)
 
 
 class ContextService:
-	"""Resolve organization and team context for the authenticated user."""
 
 	CHUNK_SIZE = 10
 
+	# Initializes the context service and ensures Firebase is ready.
 	def __init__(self) -> None:
 		ensure_firebase_initialized()
 
+	# Retrieves the full organization and team context for a user.
 	async def get_user_context(self, *, uid: str, email: str | None) -> Dict:
 		if not uid:
 			raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Missing user id')
 		return await asyncio.to_thread(self._build_context_sync, uid, email)
 
+	# Synchronously builds the user context including org, teams, and members.
 	def _build_context_sync(self, uid: str, email: str | None) -> Dict:
 		client = firestore.client()
 
@@ -147,6 +149,7 @@ class ContextService:
 		logger.info('Context resolved for user %s in org %s', uid, org_id)
 		return response
 
+	# Yields chunks of items for batched Firestore queries.
 	def _chunk(self, items: List[str]):
 		for index in range(0, len(items), self.CHUNK_SIZE):
 			yield items[index:index + self.CHUNK_SIZE]
