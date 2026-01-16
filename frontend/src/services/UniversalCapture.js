@@ -1,24 +1,8 @@
-/**
- * UniversalCapture - Universal audio capture service with STT and task detection
- * 
- * Clean public API for integration into any app:
- * - startCapture(options) - Start audio capture
- * - stopCapture() - Stop audio capture
- * - onTranscript(callback) - Register transcript callback
- * - onTaskDetected(callback) - Register task detection callback
- * - isCapturing() - Check if capture is active
- * 
- * This module provides live audio capture from any source (tab, window, system)
- * with speech-to-text via Deepgram and task detection via Gemini.
- */
-
 import { transcriptBuffer } from './TranscriptBuffer';
 import { authedRequest } from './orgApi';
 
-// Deepgram API key
 const DEEPGRAM_API_KEY = import.meta.env.VITE_DEEPGRAM_API_KEY;
 
-// Capture state
 let mediaStream = null;
 let audioContext = null;
 let deepgramSocket = null;
@@ -27,11 +11,8 @@ let transcriptCallbacks = [];
 let taskCallbacks = [];
 let currentMeetingId = null;
 let transcriptSegmentIndex = 0;
-let geminiCallInProgress = false; // Prevent concurrent Gemini calls
+let geminiCallInProgress = false;
 
-/**
- * Save transcript segment to the backend
- */
 const saveTranscriptToBackend = async (text, timestamp) => {
     if (!currentMeetingId) {
         console.log("[UniversalCapture] No meeting ID, skipping transcript save");

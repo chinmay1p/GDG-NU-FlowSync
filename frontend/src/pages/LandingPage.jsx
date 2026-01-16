@@ -41,7 +41,7 @@ const LandingPage = () => {
 			<div className="landing-spark landing-spark--seven" aria-hidden="true"></div>
 			<header className="fixed inset-x-0 top-0 z-40 border-b border-white/40 bg-white/70 backdrop-blur-xl">
 				<div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
-					<Link to="/" className="text-2xl font-semibold text-purple-700">StrataGem</Link>
+					<Link to="/" className="text-2xl font-semibold text-purple-700">FlowSync</Link>
 					<nav className="hidden gap-6 text-sm font-semibold text-slate-500 md:flex">
 						<a href="#platform" className="hover:text-slate-900">Platform</a>
 						<a href="#stats" className="hover:text-slate-900">Stats</a>
@@ -68,10 +68,10 @@ const LandingPage = () => {
 				<section id="platform" className="mx-auto flex max-w-6xl flex-col items-center gap-10 px-6 text-center">
 					<p className="text-xs font-semibold uppercase tracking-[0.6em] text-purple-400">Adaptive meeting OS</p>
 					<h1 className="text-5xl font-semibold leading-tight text-slate-900 sm:text-6xl md:text-[4.8rem] md:leading-[1.1] -rotate-1">
-						StrataGem
+						FlowSync
 					</h1>
 					<p className="max-w-3xl text-base text-slate-600 sm:text-lg">
-						Centralize every meeting, ritual, and task in one flow. StrataGem captures conversations, automates follow-ups, and syncs owners across Slack, GitHub, and your dashboards.
+						Centralize every meeting, ritual, and task in one flow. FlowSync captures conversations, automates follow-ups, and syncs owners across Slack, GitHub, and your dashboards.
 					</p>
 					<div className="flex flex-wrap items-center justify-center gap-4">
 						<Link to="/signup" className="rounded-full bg-purple-600 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-purple-600/40 transition hover:bg-purple-500">Get started</Link>
@@ -81,12 +81,12 @@ const LandingPage = () => {
 							<div className="space-y-3">
 								<p className="text-xs uppercase tracking-[0.4em] text-slate-400">Ritual streams</p>
 								<h3 className="text-2xl font-semibold text-slate-900">One canvas for every standup, retro, and customer call</h3>
-								<p className="text-sm text-slate-600">Smart agendas pull context, StrataGem records decisions, and tasks route instantly to the right owners.</p>
+								<p className="text-sm text-slate-600">Smart agendas pull context, FlowSync records decisions, and tasks route instantly to the right owners.</p>
 							</div>
 							<div className="space-y-4">
 								<div className="rounded-2xl border border-purple-100 bg-purple-50/80 px-6 py-4">
 									<p className="text-xs uppercase tracking-[0.4em] text-purple-400">Automation</p>
-									<p className="text-sm text-purple-900">Slack /assign → StrataGem task → GitHub issue</p>
+									<p className="text-sm text-purple-900">Slack /assign → FlowSync task → GitHub issue</p>
 								</div>
 								<div className="rounded-2xl border border-slate-200 bg-white px-6 py-4">
 									<p className="text-xs uppercase tracking-[0.4em] text-slate-400">Insights</p>
@@ -122,13 +122,13 @@ const LandingPage = () => {
 					<div className="rounded-3xl border border-purple-100 bg-white/80 p-6 shadow-xl backdrop-blur">
 						<p className="text-xs uppercase tracking-[0.4em] text-purple-400">Sync</p>
 						<h3 className="mt-3 text-xl font-semibold text-slate-900">Governance-ready dashboards</h3>
-						<p className="mt-2 text-sm text-slate-600">Feed StrataGem data into GitHub, Slack, and executive scoreboards without duplication.</p>
+						<p className="mt-2 text-sm text-slate-600">Feed FlowSync data into GitHub, Slack, and executive scoreboards without duplication.</p>
 					</div>
 				</section>
 			</main>
 			<footer className="relative z-10 border-t border-white/60 bg-white/70 backdrop-blur px-6 py-6">
 				<div className="mx-auto flex max-w-6xl flex-col gap-3 text-sm text-slate-500 md:flex-row md:items-center md:justify-between">
-					<p>© {new Date().getFullYear()} StrataGem. Meetings that move.</p>
+					<p>© {new Date().getFullYear()} FlowSync. Meetings that move.</p>
 					<div className="flex gap-4">
 						<Link to="/signin" className="hover:text-purple-600">Sign in</Link>
 						<Link to="/signup" className="hover:text-purple-600">Create account</Link>
