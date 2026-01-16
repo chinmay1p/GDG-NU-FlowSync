@@ -15,7 +15,7 @@ from app.core.security import ensure_firebase_initialized
 
 logger = logging.getLogger(__name__)
 
-# Configure Groq/OpenAI-compatible client
+                                         
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 GROQ_API_BASE = os.getenv("GROQ_API_BASE", "https://api.groq.com/openai/v1")
 GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
@@ -32,16 +32,16 @@ class MeetingTranscriptService:
     TRANSCRIPTS_COLLECTION = "meeting_transcripts"
     SUMMARIES_COLLECTION = "meeting_summaries"
 
-    # Meeting status constants
+                              
     STATUS_ACTIVE = "ACTIVE"
     STATUS_COMPLETED = "COMPLETED"
 
     def __init__(self) -> None:
         ensure_firebase_initialized()
 
-    # ==========================================
-    # MEETING LIFECYCLE
-    # ==========================================
+                                                
+                       
+                                                
 
     async def start_meeting(
         self,
@@ -87,7 +87,7 @@ class MeetingTranscriptService:
         }
         meeting_ref.set(payload)
 
-        # Initialize empty transcript document
+                                              
         client.collection(self.TRANSCRIPTS_COLLECTION).document(meeting_ref.id).set({
             "meetingId": meeting_ref.id,
             "orgId": org_id,
@@ -132,14 +132,14 @@ class MeetingTranscriptService:
 
         meeting_data = meeting_doc.to_dict() or {}
 
-        # Validate access
+                         
         if meeting_data.get("orgId") != org_id:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
 
         if meeting_data.get("status") == self.STATUS_COMPLETED:
             return {"meetingId": meeting_id, "status": "ALREADY_COMPLETED"}
 
-        # Update meeting status
+                               
         meeting_ref.update({
             "status": self.STATUS_COMPLETED,
             "endedAt": firestore.SERVER_TIMESTAMP,
@@ -147,7 +147,7 @@ class MeetingTranscriptService:
 
         logger.info("Meeting %s ended by %s", meeting_id, user_id)
 
-        # Generate summary if requested and not already generated
+                                                                 
         summary_result = None
         if generate_summary and not meeting_data.get("hasSummary"):
             summary_result = self._generate_summary_sync(meeting_id, org_id)
@@ -160,9 +160,9 @@ class MeetingTranscriptService:
             "summaryGenerated": summary_result is not None,
         }
 
-    # ==========================================
-    # TRANSCRIPT STORAGE
-    # ==========================================
+                                                
+                        
+                                                
 
     async def append_transcript(
         self,
@@ -205,7 +205,7 @@ class MeetingTranscriptService:
 
         client = self._get_client()
 
-        # Verify meeting exists and belongs to org
+                                                  
         meeting_doc = client.collection(self.MEETINGS_COLLECTION).document(meeting_id).get()
         if not meeting_doc.exists:
             if not allow_create:
@@ -230,7 +230,7 @@ class MeetingTranscriptService:
                 client.collection(self.MEETINGS_COLLECTION).document(meeting_id).update({"teamId": team_id})
                 meeting_data["teamId"] = team_id
 
-        # Append to transcript
+                              
         transcript_ref = client.collection(self.TRANSCRIPTS_COLLECTION).document(meeting_id)
         transcript_doc = transcript_ref.get()
         if not transcript_doc.exists:
@@ -277,24 +277,24 @@ class MeetingTranscriptService:
     ) -> Dict:
         client = self._get_client()
 
-        # Verify access via meeting
+                                   
         meeting_doc = client.collection(self.MEETINGS_COLLECTION).document(meeting_id).get()
         if not meeting_doc.exists:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Meeting not found")
 
         meeting_data = meeting_doc.to_dict() or {}
 
-        # Validate org access
+                             
         if meeting_data.get("orgId") != org_id:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
 
-        # If meeting has a team, verify user is a member
+                                                        
         team_id = meeting_data.get("teamId")
         if team_id:
             if not self._is_team_member(client, team_id, user_id):
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not a member of this team")
 
-        # Get transcript
+                        
         transcript_doc = client.collection(self.TRANSCRIPTS_COLLECTION).document(meeting_id).get()
         if not transcript_doc.exists:
             return {"meetingId": meeting_id, "segments": []}
@@ -305,9 +305,9 @@ class MeetingTranscriptService:
             "segments": transcript_data.get("segments", []),
         }
 
-    # ==========================================
-    # SUMMARY GENERATION
-    # ==========================================
+                                                
+                        
+                                                
 
     def _generate_summary_sync(self, meeting_id: str, org_id: str) -> Optional[Dict]:
         """Generate meeting summary using Groq (called once at meeting end)."""
@@ -317,7 +317,7 @@ class MeetingTranscriptService:
 
         client = self._get_client()
 
-        # Get transcript
+                        
         transcript_doc = client.collection(self.TRANSCRIPTS_COLLECTION).document(meeting_id).get()
         if not transcript_doc.exists:
             logger.warning("No transcript found for meeting %s", meeting_id)
@@ -330,14 +330,14 @@ class MeetingTranscriptService:
             logger.warning("Empty transcript for meeting %s", meeting_id)
             return None
 
-        # Combine all segments into full transcript
+                                                   
         full_transcript = " ".join(seg.get("text", "") for seg in segments)
 
         if len(full_transcript) < 50:
             logger.info("Transcript too short for summary: %d chars", len(full_transcript))
             return None
 
-        # Generate summary with Groq
+                                    
         system_prompt = "You are a meeting summarizer. Provide accurate, structured summaries with clear actionability."
         user_prompt = f"""Analyze the following meeting transcript and provide a structured summary in JSON.
 
@@ -376,11 +376,11 @@ If something is unclear, state that explicitly and do not invent facts."""
             if response.choices:
                 response_text = response.choices[0].message.content or ""
 
-            # Parse JSON from response
+                                      
             import json
             import re
 
-            # Strip markdown code blocks
+                                        
             cleaned = response_text
             if "```json" in cleaned:
                 cleaned = re.sub(r"```json\s*", "", cleaned)
@@ -388,14 +388,14 @@ If something is unclear, state that explicitly and do not invent facts."""
             elif "```" in cleaned:
                 cleaned = re.sub(r"```\s*", "", cleaned)
 
-            # Extract JSON
+                          
             json_match = re.search(r"\{[\s\S]*\}", cleaned)
             if json_match:
                 summary_data = json.loads(json_match.group(0))
             else:
                 summary_data = {"summary": cleaned, "error": "Could not parse structured format"}
 
-            # Store summary
+                           
             summary_doc = {
                 "meetingId": meeting_id,
                 "orgId": org_id,
@@ -435,24 +435,24 @@ If something is unclear, state that explicitly and do not invent facts."""
     ) -> Dict:
         client = self._get_client()
 
-        # Verify access via meeting
+                                   
         meeting_doc = client.collection(self.MEETINGS_COLLECTION).document(meeting_id).get()
         if not meeting_doc.exists:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Meeting not found")
 
         meeting_data = meeting_doc.to_dict() or {}
 
-        # Validate org access
+                             
         if meeting_data.get("orgId") != org_id:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
 
-        # If meeting has a team, verify user is a member
+                                                        
         team_id = meeting_data.get("teamId")
         if team_id:
             if not self._is_team_member(client, team_id, user_id):
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not a member of this team")
 
-        # Get summary
+                     
         summary_doc = client.collection(self.SUMMARIES_COLLECTION).document(meeting_id).get()
         if not summary_doc.exists:
             return {"meetingId": meeting_id, "summary": None, "generated": False}
@@ -493,19 +493,19 @@ If something is unclear, state that explicitly and do not invent facts."""
         if meeting_data.get("orgId") != org_id:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
 
-        # Delete primary meeting record
+                                       
         meeting_ref.delete()
 
-        # Delete transcript and summary artifacts (best-effort)
+                                                               
         client.collection(self.TRANSCRIPTS_COLLECTION).document(meeting_id).delete()
         client.collection(self.SUMMARIES_COLLECTION).document(meeting_id).delete()
 
         logger.info("Meeting %s permanently deleted for org %s", meeting_id, org_id)
         return {"meetingId": meeting_id, "deleted": True}
 
-    # ==========================================
-    # MEETING LISTING
-    # ==========================================
+                                                
+                     
+                                                
 
     async def list_meetings(
         self,
@@ -533,32 +533,32 @@ If something is unclear, state that explicitly and do not invent facts."""
     ) -> List[Dict]:
         client = self._get_client()
 
-        # Get user's team memberships
+                                     
         user_team_ids = self._get_user_team_ids(client, user_id, org_id)
 
-        # Query meetings
+                        
         query = client.collection(self.MEETINGS_COLLECTION).where("orgId", "==", org_id)
 
         if team_id:
-            # Filter by specific team
+                                     
             if team_id not in user_team_ids:
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not a member of this team")
             query = query.where("teamId", "==", team_id)
 
-        # Simplify query to avoid composite index requirement
-        # query = query.order_by("startedAt", direction=firestore.Query.DESCENDING).limit(limit)
+                                                             
+                                                                                                
 
         meetings = []
         for doc in query.stream():
             data = doc.to_dict() or {}
             meeting_team_id = data.get("teamId")
 
-            # Only include meetings from user's teams or org-wide meetings
+                                                                          
             if meeting_team_id is None or meeting_team_id in user_team_ids or data.get("createdBy") == user_id:
                 started_at = data.get("startedAt")
                 ended_at = data.get("endedAt")
 
-                # Normalize fields the dashboard expects
+                                                        
                 topic = data.get("topic") or data.get("title") or "Untitled Meeting"
                 zoom_meeting_id_raw = data.get("zoomMeetingId") or data.get("meetingId")
                 zoom_meeting_id = str(zoom_meeting_id_raw) if zoom_meeting_id_raw else None
@@ -578,12 +578,12 @@ If something is unclear, state that explicitly and do not invent facts."""
                     "startTime": start_iso,
                     "endedAt": end_iso,
                     "hasSummary": data.get("hasSummary", False),
-                    # Restore missing URL fields for Host/Join actions
+                                                                      
                     "joinUrl": data.get("joinUrl") or data.get("meetingUrl"),
                     "startUrl": data.get("startUrl"),
                 })
 
-        # Sort and limit in memory to handle missing composite indexes gracefully
+                                                                                 
         meetings.sort(key=lambda x: x.get('startTime') or '', reverse=True)
         return meetings[:limit]
 
@@ -616,17 +616,17 @@ If something is unclear, state that explicitly and do not invent facts."""
 
         data = meeting_doc.to_dict() or {}
 
-        # Validate org access
+                             
         if data.get("orgId") != org_id:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
 
-        # If meeting has a team, verify user is a member
+                                                        
         team_id = data.get("teamId")
         if team_id:
             if not self._is_team_member(client, team_id, user_id):
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not a member of this team")
 
-        # Helper to serialize timestamps
+                                        
         def serialize_ts(val):
             if val is None:
                 return None
@@ -639,7 +639,7 @@ If something is unclear, state that explicitly and do not invent facts."""
         created_at = data.get("createdAt")
         start_time = data.get("startTime")
 
-        # Return all fields needed by the bot and frontend
+                                                          
         return {
             "meetingId": data.get("meetingId"),
             "orgId": data.get("orgId"),
@@ -655,16 +655,16 @@ If something is unclear, state that explicitly and do not invent facts."""
             "startTime": serialize_ts(start_time) if start_time else serialize_ts(started_at),
             "durationMinutes": data.get("durationMinutes"),
             "hasSummary": data.get("hasSummary", False),
-            # Critical fields for bot
+                                     
             "zoomMeetingId": data.get("zoomMeetingId"),
             "joinUrl": data.get("joinUrl"),
             "startUrl": data.get("startUrl"),
             "passcode": data.get("passcode"),
         }
 
-    # ==========================================
-    # HELPERS
-    # ==========================================
+                                                
+             
+                                                
 
     def _is_team_member(self, client, team_id: str, user_id: str) -> bool:
         """Check if user is a member of the team."""
@@ -677,11 +677,11 @@ If something is unclear, state that explicitly and do not invent facts."""
         members_query = (
             client.collection("team_members")
             .where("uid", "==", user_id)
-            # .where("orgId", "==", org_id) # Simplify to avoid composite index requirement
+                                                                                           
         )
         for doc in members_query.stream():
             data = doc.to_dict() or {}
-            # Perform org check in memory
+                                         
             if data.get("orgId") != org_id:
                 continue
             if data.get("teamId"):
@@ -694,5 +694,5 @@ If something is unclear, state that explicitly and do not invent facts."""
         return firestore.client()
 
 
-# Export singleton instance
+                           
 meeting_transcript_service = MeetingTranscriptService()

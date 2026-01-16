@@ -26,14 +26,14 @@ async def login(request: LoginRequest):
 	"""
 	if not request.idToken:
 		raise HTTPException(status_code=401, detail='ID token is required')
-	
+ 
 	claims = verify_firebase_token(request.idToken)
-	
+ 
 	return UserResponse(
-		uid=claims.get('uid'),
-		email=claims.get('email'),
-		name=claims.get('name'),
-		picture=claims.get('picture'),
+	 uid=claims.get('uid'),
+	 email=claims.get('email'),
+	 name=claims.get('name'),
+	 picture=claims.get('picture'),
 	)
 
 
@@ -46,8 +46,8 @@ async def get_me(current_user: dict = Depends(get_current_user)):
 	verifies it, and returns the authenticated user's information.
 	"""
 	return UserResponse(
-		uid=current_user.get('uid'),
-		email=current_user.get('email'),
-		name=current_user.get('name'),
-		picture=current_user.get('picture'),
+	 uid=current_user.get('uid'),
+	 email=current_user.get('email'),
+	 name=current_user.get('name'),
+	 picture=current_user.get('picture'),
 	)

@@ -31,9 +31,9 @@ class SessionVerifyResponse(BaseModel):
 @router.post('/session/create', response_model=SessionCreateResponse)
 async def create_session(payload: SessionCreateRequest, current_user: dict = Depends(get_current_user)):
 	result = await extension_session_service.create_session(
-		uid=current_user.get('uid'),
-		email=current_user.get('email'),
-		org_id=payload.orgId,
+	 uid=current_user.get('uid'),
+	 email=current_user.get('email'),
+	 org_id=payload.orgId,
 	)
 	return result
 

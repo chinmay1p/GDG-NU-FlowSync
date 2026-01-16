@@ -53,17 +53,17 @@ class TaskService:
 		return self._create_task_from_slack_sync(command)
 
 	async def create_task_manual(
-		self,
-		*,
-		creator_uid: str,
-		creator_email: str,
-		payload: Dict,
+	 self,
+	 *,
+	 creator_uid: str,
+	 creator_email: str,
+	 payload: Dict,
 	) -> Dict:
 		return await asyncio.to_thread(
-			self._create_task_manual_sync,
-			creator_uid,
-			creator_email,
-			payload,
+		 self._create_task_manual_sync,
+		 creator_uid,
+		 creator_email,
+		 payload,
 		)
 
 	async def list_tasks(self, *, current_user: Dict, filters: TaskFilters) -> List[Dict]:
@@ -88,28 +88,28 @@ class TaskService:
 			raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Assignee is missing workspace context')
 
 		self._merge_org_integration(
-			client,
-			org_id,
-			{
-				'slack': {
-					'teamId': command.team_id,
-					'lastCommandAt': firestore.SERVER_TIMESTAMP,
-				},
-			},
+		 client,
+		 org_id,
+		 {
+		  'slack': {
+		   'teamId': command.team_id,
+		   'lastCommandAt': firestore.SERVER_TIMESTAMP,
+		  },
+		 },
 		)
 
 		return self._create_task_sync(
-			client=client,
-			org_id=org_id,
-			title=parsed['title'],
-			description=parsed['description'],
-			assigned_member=assignee_member,
-			priority=parsed['priority'],
-			source='SLACK',
-			created_by_email=creator_email,
-			status_value='APPROVED',
-			due_date=None,
-			create_github_issue=True,
+		 client=client,
+		 org_id=org_id,
+		 title=parsed['title'],
+		 description=parsed['description'],
+		 assigned_member=assignee_member,
+		 priority=parsed['priority'],
+		 source='SLACK',
+		 created_by_email=creator_email,
+		 status_value='APPROVED',
+		 due_date=None,
+		 create_github_issue=True,
 		)
 
 	def _create_task_manual_sync(self, creator_uid: str, creator_email: str, payload: Dict) -> Dict:
@@ -144,21 +144,21 @@ class TaskService:
 			due_date = self._parse_due_date(due_date_value)
 
 		create_github_issue = bool(payload.get('createGithubIssue'))
-		target_repo_id = payload.get('targetGithubRepoId')  # Optional target repo ID
+		target_repo_id = payload.get('targetGithubRepoId')                           
 
 		return self._create_task_sync(
-			client=client,
-			org_id=org_id,
-			title=title,
-			description=description,
-			assigned_member=assignee_member,
-			priority=priority,
-			source='DASHBOARD',
-			created_by_email=creator_email,
-			status_value='APPROVED',
-			due_date=due_date,
-			create_github_issue=create_github_issue,
-			target_repo_id=target_repo_id,
+		 client=client,
+		 org_id=org_id,
+		 title=title,
+		 description=description,
+		 assigned_member=assignee_member,
+		 priority=priority,
+		 source='DASHBOARD',
+		 created_by_email=creator_email,
+		 status_value='APPROVED',
+		 due_date=due_date,
+		 create_github_issue=create_github_issue,
+		 target_repo_id=target_repo_id,
 		)
 
 	def _list_tasks_sync(self, current_user: Dict, filters: TaskFilters) -> List[Dict]:
@@ -246,63 +246,63 @@ class TaskService:
 
 		completed_ts = datetime.now(timezone.utc)
 		update_payload = {
-			'status': 'COMPLETED',
-			'completedAt': firestore.SERVER_TIMESTAMP,
-			'completedByEmail': user_email,
+		 'status': 'COMPLETED',
+		 'completedAt': firestore.SERVER_TIMESTAMP,
+		 'completedByEmail': user_email,
 		}
 		doc_ref.update(update_payload)
 		data.update(
-			{
-				'status': 'COMPLETED',
-				'completedAt': completed_ts,
-				'completedByEmail': user_email,
-			}
+		 {
+		  'status': 'COMPLETED',
+		  'completedAt': completed_ts,
+		  'completedByEmail': user_email,
+		 }
 		)
 		return self._serialize_task(task_id, data)
 
 	def _create_task_sync(
-		self,
-		*,
-		client,
-		org_id: str,
-		title: str,
-		description: str,
-		assigned_member: Dict,
-		priority: str,
-		source: str,
-		created_by_email: str,
-		status_value: str,
-		due_date: Optional[datetime],
-		create_github_issue: bool,
-		target_repo_id: Optional[str] = None,
+	 self,
+	 *,
+	 client,
+	 org_id: str,
+	 title: str,
+	 description: str,
+	 assigned_member: Dict,
+	 priority: str,
+	 source: str,
+	 created_by_email: str,
+	 status_value: str,
+	 due_date: Optional[datetime],
+	 create_github_issue: bool,
+	 target_repo_id: Optional[str] = None,
 	) -> Dict:
 		task_ref = client.collection(self.TASKS_COLLECTION).document()
 		payload = {
-			'taskId': task_ref.id,
-			'orgId': org_id,
-			'title': title,
-			'description': description,
-			'assignedToEmail': assigned_member.get('email') or '',
-			'assignedUid': assigned_member.get('uid'),
-			'priority': priority,
-			'status': status_value,
-			'source': source.upper(),
-			'createdAt': firestore.SERVER_TIMESTAMP,
-			'createdByEmail': created_by_email,
-			'dueDate': due_date,
+		 'taskId': task_ref.id,
+		 'orgId': org_id,
+		 'title': title,
+		 'description': description,
+		 'assignedToEmail': assigned_member.get('email') or '',
+		 'assignedUid': assigned_member.get('uid'),
+		 'priority': priority,
+		 'status': status_value,
+		 'source': source.upper(),
+		 'createdAt': firestore.SERVER_TIMESTAMP,
+		 'createdByEmail': created_by_email,
+		 'dueDate': due_date,
 		}
-		
-		# Store target repo ID if provided
+  
+                                    
 		if target_repo_id:
 			payload['githubRepoId'] = target_repo_id
-		
+  
 		task_ref.set(payload)
 
 		issue_url = None
 		issue_number = None
 		if create_github_issue:
 			issue_data = self._maybe_create_github_issue(
-				client, org_id, title, description, assigned_member.get('email'), target_repo_id
+			 client, org_id, title, description, assigned_member.get('email'), target_repo_id
 			)
 			if issue_data:
 				issue_url = issue_data.get('url')
@@ -320,13 +320,13 @@ class TaskService:
 		return self._serialize_task(task_ref.id, payload)
 
 	def _maybe_create_github_issue(
-		self, 
-		client, 
-		org_id: str, 
-		title: str, 
-		description: str, 
-		assignee_email: Optional[str],
-		target_repo_id: Optional[str] = None
+	 self, 
+	 client, 
+	 org_id: str, 
+	 title: str, 
+	 description: str, 
+	 assignee_email: Optional[str],
+	 target_repo_id: Optional[str] = None
 	) -> Optional[Dict]:
 		"""
 		Create a GitHub issue in the specified repository.
@@ -336,45 +336,45 @@ class TaskService:
 		"""
 		integrations = self._get_org_integrations(client, org_id)
 		github_config = integrations.get('github') or {}
-		
-		# Check if using new multi-repo format
+  
+                                        
 		repositories = github_config.get('repositories')
 		if repositories and isinstance(repositories, list):
-			# Multi-repo format
+                      
 			target_repo = None
-			
+   
 			if target_repo_id:
-				# Find specific repo by ID
+                              
 				for repo_entry in repositories:
 					if repo_entry.get('id') == target_repo_id:
 						target_repo = repo_entry
 						break
-				
+    
 				if not target_repo:
 					logger.warning('Target repo %s not found for org %s', target_repo_id, org_id)
 					return None
 			else:
-				# Use default repo
+                      
 				for repo_entry in repositories:
 					if repo_entry.get('isDefault'):
 						target_repo = repo_entry
 						break
-				
-				# If no default, use first repo
+    
+                                   
 				if not target_repo and len(repositories) > 0:
 					target_repo = repositories[0]
-			
+   
 			if not target_repo:
 				logger.warning('No GitHub repos configured for org %s', org_id)
 				return None
-			
+   
 			repo = target_repo.get('repo')
 			org_token = target_repo.get('token')
 		else:
-			# Legacy single-repo format (backward compatibility)
+                                                       
 			repo = github_config.get('repo')
-			
-			# Fall back to default repo if not configured
+   
+                                                
 			if not repo and DEFAULT_GITHUB_REPO:
 				repo = DEFAULT_GITHUB_REPO
 				self._merge_org_integration(client, org_id, {'github': {'repo': repo}})
@@ -382,14 +382,14 @@ class TaskService:
 			if not repo:
 				logger.warning('No GitHub repo configured for org %s', org_id)
 				return None
-			
+   
 			org_token = github_config.get('token')
 
 		body = 'Created from StrataGem\n'
 		body += f"Assigned to: {assignee_email or 'Unassigned'}\n\n"
 		body += description or 'No description provided.'
 
-		# Use org-specific token if available, otherwise use default from env
+                                                                       
 		return create_issue(repo, title or 'Meeting task', body, token=org_token)
 
 	def _serialize_task(self, task_id: str, data: Dict) -> Dict:
@@ -464,9 +464,9 @@ class TaskService:
 		if not value:
 			return None
 		query = (
-			client.collection(self.ORG_MEMBERS_COLLECTION)
-			.where('email', '==', value)
-			.limit(1)
+		 client.collection(self.ORG_MEMBERS_COLLECTION)
+		 .where('email', '==', value)
+		 .limit(1)
 		)
 		matches = list(query.stream())
 		if not matches:
@@ -483,10 +483,10 @@ class TaskService:
 
 	def _find_org_member_by_email(self, client, org_id: str, email: str) -> Optional[Dict]:
 		query = (
-			client.collection(self.ORG_MEMBERS_COLLECTION)
-			.where('orgId', '==', org_id)
-			.where('email', '==', email.lower())
-			.limit(1)
+		 client.collection(self.ORG_MEMBERS_COLLECTION)
+		 .where('orgId', '==', org_id)
+		 .where('email', '==', email.lower())
+		 .limit(1)
 		)
 		matches = list(query.stream())
 		if not matches:
@@ -499,9 +499,9 @@ class TaskService:
 		if not uid:
 			return None
 		query = (
-			client.collection(self.ORG_MEMBERS_COLLECTION)
-			.where('uid', '==', uid)
-			.limit(1)
+		 client.collection(self.ORG_MEMBERS_COLLECTION)
+		 .where('uid', '==', uid)
+		 .limit(1)
 		)
 		matches = list(query.stream())
 		if not matches:
@@ -530,11 +530,11 @@ class TaskService:
 				return
 
 		team_query = (
-			client.collection(self.TEAM_MEMBERS_COLLECTION)
-			.where('orgId', '==', org_id)
-			.where('uid', '==', uid)
-			.where('role', '==', 'MANAGER')
-			.limit(1)
+		 client.collection(self.TEAM_MEMBERS_COLLECTION)
+		 .where('orgId', '==', org_id)
+		 .where('uid', '==', uid)
+		 .where('role', '==', 'MANAGER')
+		 .limit(1)
 		)
 		if list(team_query.stream()):
 			return

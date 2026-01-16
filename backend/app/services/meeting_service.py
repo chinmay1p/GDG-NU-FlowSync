@@ -19,11 +19,11 @@ class MeetingService:
 	CODE_PATTERN = re.compile(r'^[a-z]{3}-[a-z]{4}-[a-z]{3}$', re.IGNORECASE)
 	CONDENSED_PATTERN = re.compile(r'^[a-z]{10,12}$', re.IGNORECASE)
 
-	# Initializes the meeting service and ensures Firebase is ready.
+                                                                 
 	def __init__(self) -> None:
 		ensure_firebase_initialized()
 
-	# Starts a new meeting from the Chrome extension with a Google Meet URL.
+                                                                         
 	async def start_meeting(self, *, session: Dict, meet_url: str) -> Dict:
 		normalized_url = self._normalize_meet_url(meet_url)
 		if not normalized_url:
@@ -36,7 +36,7 @@ class MeetingService:
 
 		return await asyncio.to_thread(self._start_meeting_sync, session, normalized_url)
 
-	# Ends an active meeting by ID.
+                                
 	async def end_meeting(self, *, session: Dict, meeting_id: str) -> Dict:
 		meeting_key = (meeting_id or '').strip()
 		if not meeting_key:
@@ -48,7 +48,7 @@ class MeetingService:
 
 		return await asyncio.to_thread(self._end_meeting_sync, session, meeting_key)
 
-	# Synchronously creates a meeting document in Firestore.
+                                                         
 	def _start_meeting_sync(self, session: Dict, meet_url: str) -> Dict:
 		client = self._get_client()
 		self._ensure_no_active_meeting(client, session['uid'])
@@ -57,22 +57,22 @@ class MeetingService:
 
 		meeting_ref = client.collection(self.COLLECTION_NAME).document()
 		payload = {
-			'meetingId': meeting_ref.id,
-			'orgId': session['orgId'],
-			'createdBy': session['uid'],
-			'email': session.get('email'),
-			'role': role,
-			'meetUrl': meet_url,
-			'startedAt': firestore.SERVER_TIMESTAMP,
-			'endedAt': None,
-			'active': True,
+		 'meetingId': meeting_ref.id,
+		 'orgId': session['orgId'],
+		 'createdBy': session['uid'],
+		 'email': session.get('email'),
+		 'role': role,
+		 'meetUrl': meet_url,
+		 'startedAt': firestore.SERVER_TIMESTAMP,
+		 'endedAt': None,
+		 'active': True,
 		}
 		meeting_ref.set(payload)
 
 		logger.info('Meeting %s started by %s in org %s', meeting_ref.id, session['uid'], session['orgId'])
 		return {'meetingId': meeting_ref.id, 'role': role}
 
-	# Synchronously ends a meeting and updates Firestore.
+                                                      
 	def _end_meeting_sync(self, session: Dict, meeting_id: str) -> Dict:
 		client = self._get_client()
 		meeting_ref = client.collection(self.COLLECTION_NAME).document(meeting_id)
@@ -95,18 +95,18 @@ class MeetingService:
 
 		return {'meetingId': meeting_id, 'status': status_value}
 
-	# Raises an error if the user already has an active meeting.
+                                                             
 	def _ensure_no_active_meeting(self, client, uid: str) -> None:
 		active_query = (
-			client.collection(self.COLLECTION_NAME)
-			.where('createdBy', '==', uid)
-			.where('active', '==', True)
-			.limit(1)
+		 client.collection(self.COLLECTION_NAME)
+		 .where('createdBy', '==', uid)
+		 .where('active', '==', True)
+		 .limit(1)
 		)
 		if list(active_query.stream()):
 			raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail='An active meeting is already running for this user')
 
-	# Determines the user's role based on org and team membership.
+                                                               
 	def _resolve_role(self, client, session: Dict) -> str:
 		org_id = session['orgId']
 		uid = session['uid']
@@ -118,10 +118,10 @@ class MeetingService:
 				return 'MANAGER'
 
 		team_members = (
-			client.collection('team_members')
-			.where('uid', '==', uid)
-			.where('role', '==', 'MANAGER')
-			.limit(5)
+		 client.collection('team_members')
+		 .where('uid', '==', uid)
+		 .where('role', '==', 'MANAGER')
+		 .limit(5)
 		)
 		for entry in team_members.stream():
 			data = entry.to_dict() or {}
@@ -130,7 +130,7 @@ class MeetingService:
 
 		return 'EMPLOYEE'
 
-	# Normalizes and validates a Google Meet URL.
+                                              
 	def _normalize_meet_url(self, meet_url: str) -> str:
 		candidate = (meet_url or '').strip()
 		if not candidate:
@@ -151,7 +151,7 @@ class MeetingService:
 
 		return f'https://{self.MEET_HOST}/{code.lower()}'
 
-	# Extracts the meeting code from a URL path.
+                                             
 	def _extract_meeting_code(self, path: str | None) -> str:
 		if not path:
 			return ''
@@ -163,7 +163,7 @@ class MeetingService:
 			return first_segment
 		return ''
 
-	# Returns the Firestore client instance.
+                                         
 	@staticmethod
 	def _get_client():
 		ensure_firebase_initialized()

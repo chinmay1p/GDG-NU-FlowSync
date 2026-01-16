@@ -19,10 +19,10 @@ class Settings:
 @lru_cache
 def get_settings() -> Settings:
 	default_origins = [
-		'http://localhost:5173',
-		'http://localhost:3000',
-		'http://127.0.0.1:5173',
-		'http://127.0.0.1:3000',
+	 'http://localhost:5173',
+	 'http://localhost:3000',
+	 'http://127.0.0.1:5173',
+	 'http://127.0.0.1:3000',
 	]
 	additional_origins = _parse_csv(os.getenv('CORS_ALLOW_ORIGINS'))
 	all_origins: list[str] = []

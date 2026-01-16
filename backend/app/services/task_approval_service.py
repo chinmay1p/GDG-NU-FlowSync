@@ -77,9 +77,9 @@ class TaskApprovalService:
     def _pending_candidate_count(task_candidates: List[Dict]) -> int:
         return sum(1 for item in task_candidates if (item.get("status") or "PENDING") not in {"APPROVED", "REJECTED"})
 
-    # ==========================================
-    # EMIT TASK DETECTED EVENT
-    # ==========================================
+                                                
+                              
+                                                
 
     async def emit_task_detected(
         self,
@@ -96,7 +96,7 @@ class TaskApprovalService:
         if not task_candidates:
             return {"sent": False, "reason": "No task candidates"}
 
-        # Store pending approval in Firestore
+                                             
         normalized_candidates = self._normalize_task_candidates(task_candidates)
         pending_id = await asyncio.to_thread(
             self._store_pending_approval_sync,
@@ -106,7 +106,7 @@ class TaskApprovalService:
             normalized_candidates,
         )
 
-        # Get manager UIDs for the team
+                                       
         manager_uids = await asyncio.to_thread(
             self._get_team_manager_uids_sync,
             team_id,
@@ -117,7 +117,7 @@ class TaskApprovalService:
             logger.info("No managers found for team %s in org %s", team_id, org_id)
             return {"sent": False, "reason": "No managers found", "pendingId": pending_id}
 
-        # Emit to each manager
+                              
         payload = {
             "pendingId": pending_id,
             "meetingId": meeting_id,
@@ -182,7 +182,7 @@ class TaskApprovalService:
         manager_uids = []
 
         if team_id:
-            # Get team managers
+                               
             team_members_query = (
                 client.collection(self.TEAM_MEMBERS_COLLECTION)
                 .where(filter=firestore.FieldFilter("teamId", "==", team_id))
@@ -193,7 +193,7 @@ class TaskApprovalService:
                 if data.get("uid"):
                     manager_uids.append(data["uid"])
 
-        # Also include org admins
+                                 
         org_members_query = (
             client.collection(self.ORG_MEMBERS_COLLECTION)
             .where(filter=firestore.FieldFilter("orgId", "==", org_id))
@@ -207,9 +207,9 @@ class TaskApprovalService:
 
         return manager_uids
 
-    # ==========================================
-    # APPROVE TASK
-    # ==========================================
+                                                
+                  
+                                                
 
     async def approve_task(
         self,
@@ -246,7 +246,7 @@ class TaskApprovalService:
     ) -> Dict:
         client = self._get_client()
 
-        # Get pending approval
+                              
         pending_ref = client.collection(self.PENDING_TASKS_COLLECTION).document(pending_id)
         pending_doc = pending_ref.get()
 
@@ -259,22 +259,22 @@ class TaskApprovalService:
         meeting_id = pending_data.get("meetingId")
         task_candidates = pending_data.get("taskCandidates", [])
 
-        # Validate task index
+                             
         if task_index < 0 or task_index >= len(task_candidates):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid task index")
 
-        # Verify user is a manager
+                                  
         if not self._is_manager(client, org_id, team_id, user_id):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only managers can approve tasks")
 
-        # Get the task candidate
+                                
         task_candidate = task_candidates[task_index]
 
-        # Apply edits if provided
+                                 
         if edits:
             task_candidate = {**task_candidate, **edits}
 
-        # Create the actual task
+                                
         task_id = self._create_task_from_approval(
             client,
             org_id=org_id,
@@ -286,7 +286,7 @@ class TaskApprovalService:
             create_github_issue=create_github_issue,
         )
 
-        # Mark this task candidate as approved
+                                              
         task_candidates[task_index]["approved"] = True
         task_candidates[task_index]["status"] = "APPROVED"
         task_candidates[task_index]["approvedTaskId"] = task_id
@@ -299,7 +299,7 @@ class TaskApprovalService:
 
         logger.info("Task %s approved by %s from pending %s", task_id, user_id, pending_id)
 
-        # Broadcast task creation
+                                 
         asyncio.create_task(self._broadcast_task_created(task_id, org_id, team_id))
 
         return {
@@ -422,25 +422,25 @@ class TaskApprovalService:
                     detected_at_dt = datetime.fromtimestamp(float(detected_at_value) / 1000, tz=timezone.utc)
                 elif isinstance(detected_at_value, str):
                     detected_at_dt = datetime.fromtimestamp(float(detected_at_value) / 1000, tz=timezone.utc)
-            except Exception:  # pragma: no cover - defensive parsing
+            except Exception:                                        
                 detected_at_dt = None
 
-        # Find assignee if specified
+                                    
         assignee_email = task_data.get("assignee", "").strip()
         assigned_uid = None
 
         if assignee_email and assignee_email.lower() != "unassigned":
-            # Try to find the user by email
+                                           
             member_doc = self._find_org_member_by_email(client, org_id, assignee_email)
             if member_doc:
                 assigned_uid = member_doc.get("uid")
                 assignee_email = member_doc.get("email", assignee_email)
 
-        # Parse due date
+                        
         due_date = None
         deadline_str = task_data.get("deadline", "")
         if deadline_str and deadline_str.lower() not in ["not specified", "unspecified", ""]:
-            # Try to parse deadline (simple approach)
+                                                     
             try:
                 from dateutil import parser
                 due_date = parser.parse(deadline_str, fuzzy=True)
@@ -474,7 +474,7 @@ class TaskApprovalService:
         if detected_at_dt:
             payload["detectedAt"] = detected_at_dt
 
-        # Create GitHub issue if requested
+                                          
         if create_github_issue:
             github_result = self._maybe_create_github_issue(
                 client,
@@ -522,7 +522,7 @@ class TaskApprovalService:
         try:
             client = self._get_client()
 
-            # Get all team members or org members
+                                                 
             if team_id:
                 members_query = client.collection(self.TEAM_MEMBERS_COLLECTION).where(filter=firestore.FieldFilter("teamId", "==", team_id))
             else:
@@ -534,7 +534,7 @@ class TaskApprovalService:
                 if data.get("uid"):
                     user_ids.append(data["uid"])
 
-            # Get task data
+                           
             task_doc = client.collection(self.TASKS_COLLECTION).document(task_id).get()
             task_data = task_doc.to_dict() if task_doc.exists else {}
 
@@ -552,9 +552,9 @@ class TaskApprovalService:
         except Exception as e:
             logger.warning("Failed to broadcast task creation: %s", e)
 
-    # ==========================================
-    # REJECT TASK
-    # ==========================================
+                                                
+                 
+                                                
 
     async def reject_task(
         self,
@@ -585,7 +585,7 @@ class TaskApprovalService:
     ) -> Dict:
         client = self._get_client()
 
-        # Get pending approval
+                              
         pending_ref = client.collection(self.PENDING_TASKS_COLLECTION).document(pending_id)
         pending_doc = pending_ref.get()
 
@@ -597,15 +597,15 @@ class TaskApprovalService:
         team_id = pending_data.get("teamId")
         task_candidates = pending_data.get("taskCandidates", [])
 
-        # Validate task index
+                             
         if task_index < 0 or task_index >= len(task_candidates):
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid task index")
 
-        # Verify user is a manager
+                                  
         if not self._is_manager(client, org_id, team_id, user_id):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only managers can reject tasks")
 
-        # Mark as rejected
+                          
         task_candidates[task_index]["rejected"] = True
         task_candidates[task_index]["status"] = "REJECTED"
         task_candidates[task_index]["rejectedBy"] = user_id
@@ -702,9 +702,9 @@ class TaskApprovalService:
             "remaining": self._pending_candidate_count(task_candidates),
         }
 
-    # ==========================================
-    # GET PENDING APPROVALS
-    # ==========================================
+                                                
+                           
+                                                
 
     async def get_pending_approvals(
         self,
@@ -726,13 +726,13 @@ class TaskApprovalService:
     ) -> List[Dict]:
         client = self._get_client()
 
-        # Get user's teams where they are a manager
+                                                   
         managed_teams = self._get_user_managed_teams(client, user_id, org_id)
 
-        # Also check if user is org admin
+                                         
         is_org_admin = self._is_org_admin(client, org_id, user_id)
 
-        # Query pending approvals
+                                 
         pending_query = (
             client.collection(self.PENDING_TASKS_COLLECTION)
             .where(filter=firestore.FieldFilter("orgId", "==", org_id))
@@ -746,9 +746,9 @@ class TaskApprovalService:
             if status_value not in {"PENDING", "PARTIAL"}:
                 continue
 
-            # Check if user has access
+                                      
             if is_org_admin or team_id in managed_teams or team_id is None:
-                # Format timestamps
+                                   
                 created_at = data.get("createdAt")
                 results.append({
                     "pendingId": data.get("pendingId"),
@@ -763,17 +763,17 @@ class TaskApprovalService:
         results.sort(key=lambda item: item.get("createdAt") or "", reverse=True)
         return results
 
-    # ==========================================
-    # HELPERS
-    # ==========================================
+                                                
+             
+                                                
 
     def _is_manager(self, client, org_id: str, team_id: Optional[str], user_id: str) -> bool:
         """Check if user is a manager (team manager or org admin)."""
-        # Check if org admin
+                            
         if self._is_org_admin(client, org_id, user_id):
             return True
 
-        # Check if team manager
+                               
         if team_id:
             member_doc = client.collection(self.TEAM_MEMBERS_COLLECTION).document(f"{team_id}_{user_id}").get()
             if member_doc.exists:
@@ -825,5 +825,5 @@ class TaskApprovalService:
         return firestore.client()
 
 
-# Export singleton instance
+                           
 task_approval_service = TaskApprovalService()

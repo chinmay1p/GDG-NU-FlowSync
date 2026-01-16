@@ -17,12 +17,12 @@ class ExtensionSessionService:
 	MEMBERS_COLLECTION = 'org_members'
 	DEFAULT_TTL_HOURS = 24
 
-	# Initializes the service with a configurable session TTL.
+                                                           
 	def __init__(self, ttl_hours: int = DEFAULT_TTL_HOURS) -> None:
 		self.ttl_hours = ttl_hours
 		ensure_firebase_initialized()
 
-	# Creates a new extension session for a user in an organization.
+                                                                 
 	async def create_session(self, *, uid: str | None, email: str | None, org_id: str | None) -> dict:
 		if not uid:
 			raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Missing user id')
@@ -31,14 +31,14 @@ class ExtensionSessionService:
 
 		return await asyncio.to_thread(self._create_session_sync, uid, email or '', org_id)
 
-	# Verifies a session ID and returns user info if valid.
+                                                        
 	async def verify_session(self, session_id: str | None) -> dict:
 		if not session_id:
 			raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Session id is required')
 
 		return await asyncio.to_thread(self._verify_session_sync, session_id)
 
-	# Synchronously creates and stores a session document in Firestore.
+                                                                    
 	def _create_session_sync(self, uid: str, email: str, org_id: str) -> dict:
 		client = self._get_client()
 		member_ref = client.collection(self.MEMBERS_COLLECTION).document(f'{org_id}_{uid}')
@@ -51,13 +51,13 @@ class ExtensionSessionService:
 		expires_at = now + timedelta(hours=self.ttl_hours)
 
 		session_payload = {
-			'sessionId': session_id,
-			'uid': uid,
-			'email': email,
-			'orgId': org_id,
-			'createdAt': now,
-			'expiresAt': expires_at,
-			'revoked': False,
+		 'sessionId': session_id,
+		 'uid': uid,
+		 'email': email,
+		 'orgId': org_id,
+		 'createdAt': now,
+		 'expiresAt': expires_at,
+		 'revoked': False,
 		}
 
 		collection = client.collection(self.COLLECTION_NAME)
@@ -65,11 +65,11 @@ class ExtensionSessionService:
 		logger.info('Extension session created for uid %s in org %s', uid, org_id)
 
 		return {
-			'sessionId': session_id,
-			'expiresAt': expires_at,
+		 'sessionId': session_id,
+		 'expiresAt': expires_at,
 		}
 
-	# Synchronously verifies a session by checking existence, expiry, and revocation.
+                                                                                  
 	def _verify_session_sync(self, session_id: str) -> dict:
 		client = self._get_client()
 		doc_ref = client.collection(self.COLLECTION_NAME).document(session_id)
@@ -94,12 +94,12 @@ class ExtensionSessionService:
 			raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail='Session record is incomplete')
 
 		return {
-			'uid': uid,
-			'email': data.get('email'),
-			'orgId': org_id,
+		 'uid': uid,
+		 'email': data.get('email'),
+		 'orgId': org_id,
 		}
 
-	# Returns the Firestore client instance.
+                                         
 	@staticmethod
 	def _get_client():
 		ensure_firebase_initialized()

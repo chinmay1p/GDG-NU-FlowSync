@@ -49,7 +49,7 @@ class ContextResponse(BaseModel):
 @router.get('/context', response_model=ContextResponse)
 async def get_context(current_user: dict = Depends(get_current_user)):
 	payload = await context_service.get_user_context(
-		uid=current_user.get('uid'),
-		email=current_user.get('email'),
+	 uid=current_user.get('uid'),
+	 email=current_user.get('email'),
 	)
 	return payload

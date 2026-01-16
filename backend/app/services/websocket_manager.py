@@ -14,13 +14,13 @@ class WebSocketManager:
         self._connections: Dict[str, Set[WebSocket]] = {}
         self._lock = asyncio.Lock()
 
-    # Registers a WebSocket connection for a specific user.
+                                                           
     async def register(self, user_id: str, websocket: WebSocket) -> None:
         async with self._lock:
             self._connections.setdefault(user_id, set()).add(websocket)
             logger.info('Registered notification websocket for user %s (total=%d)', user_id, len(self._connections[user_id]))
 
-    # Removes a WebSocket connection for a specific user.
+                                                         
     async def unregister(self, user_id: str, websocket: WebSocket) -> None:
         async with self._lock:
             bucket = self._connections.get(user_id)
@@ -31,7 +31,7 @@ class WebSocketManager:
                 self._connections.pop(user_id, None)
             logger.info('Unregistered notification websocket for user %s', user_id)
 
-    # Sends a JSON event to all WebSocket connections for a user.
+                                                                 
     async def emit_to_user(self, user_id: str, event: str, payload: dict) -> None:
         async with self._lock:
             targets = list(self._connections.get(user_id, set()))

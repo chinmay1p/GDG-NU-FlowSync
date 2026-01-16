@@ -19,11 +19,11 @@ class TaskDetectionService:
     COLLECTION_NAME = 'meeting_session_triggers'
     EVENT_NAME = 'TASK_DETECTED'
 
-    # Initializes the task detection service and ensures Firebase is ready.
+                                                                           
     def __init__(self) -> None:
         ensure_firebase_initialized()
 
-    # Starts a detection session, replaying if already triggered.
+                                                                 
     async def start_session(self, session_token: str, meeting_source: str) -> Dict:
         token = (session_token or '').strip()
         if not token:
@@ -45,7 +45,7 @@ class TaskDetectionService:
 
         return {'status': 'queued', 'triggerId': token_hash}
 
-    # Emits a task detection event to the user after a delay.
+                                                             
     async def _emit_detection_after_delay(self, trigger_id: str, session_context: Dict) -> None:
         logger.info('Scheduled detection emission in 10s for trigger %s', trigger_id[:16])
         await asyncio.sleep(10)
@@ -72,13 +72,13 @@ class TaskDetectionService:
         except Exception as exc:
             logger.warning('Failed to emit detection event for %s: %s', user_id, exc)
 
-    # Checks if a session has already triggered detection.
+                                                          
     def _session_already_triggered(self, token_hash: str) -> bool:
         client = self._get_client()
         snapshot = client.collection(self.COLLECTION_NAME).document(token_hash).get()
         return snapshot.exists
 
-    # Marks a session as triggered in Firestore.
+                                                
     def _mark_triggered(self, token_hash: str, session_context: Dict, meeting_source: str) -> None:
         client = self._get_client()
         doc = client.collection(self.COLLECTION_NAME).document(token_hash)
@@ -93,12 +93,12 @@ class TaskDetectionService:
             }
         )
 
-    # Hashes a session token for storage.
+                                         
     @staticmethod
     def _hash_token(token: str) -> str:
         return hashlib.sha256(token.encode('utf-8')).hexdigest()
 
-    # Returns the Firestore client instance.
+                                            
     @staticmethod
     def _get_client():
         ensure_firebase_initialized()

@@ -34,9 +34,9 @@ def _verify_slack_signature(request: Request, body: bytes) -> None:
 
 	basestring = f'v0:{timestamp}:{body.decode()}'
 	computed = 'v0=' + hmac.new(
-		SLACK_SIGNING_SECRET.encode(),
-		basestring.encode(),
-		hashlib.sha256,
+	 SLACK_SIGNING_SECRET.encode(),
+	 basestring.encode(),
+	 hashlib.sha256,
 	).hexdigest()
 
 	if not hmac.compare_digest(computed, signature):
@@ -59,11 +59,11 @@ async def handle_slack_command(request: Request):
 		raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Missing team id')
 
 	payload = SlackCommandPayload(
-		team_id=team_id,
-		text=command_text or '',
-		slack_user_id=user_id or 'unknown',
-		user_name=user_name or 'unknown',
-		user_email=user_email,
+	 team_id=team_id,
+	 text=command_text or '',
+	 slack_user_id=user_id or 'unknown',
+	 user_name=user_name or 'unknown',
+	 user_email=user_email,
 	)
 
 	try:
@@ -72,7 +72,7 @@ async def handle_slack_command(request: Request):
 		message = exc.detail or 'Unable to create task.'
 		logger.warning('Slack command failed: %s', message)
 		return PlainTextResponse(message)
-	except Exception as exc:  # noqa: BLE001
+	except Exception as exc:                
 		logger.exception('Unexpected Slack command error: %s', exc)
 		return PlainTextResponse('Something went wrong while creating the task.')
 

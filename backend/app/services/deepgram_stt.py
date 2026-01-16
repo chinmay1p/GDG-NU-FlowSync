@@ -11,7 +11,7 @@ from urllib.parse import urlencode
 try:
 	from websockets.asyncio.client import connect as ws_connect
 except ImportError:
-	from websockets.client import connect as ws_connect  # type: ignore
+	from websockets.client import connect as ws_connect                
 
 from websockets.exceptions import ConnectionClosed
 
@@ -28,7 +28,7 @@ DEEPGRAM_LISTEN_ENDPOINT = 'wss://api.deepgram.com/v1/listen'
 
 class DeepgramStreamingSession:
 
-	# Initializes a Deepgram streaming session with meeting ID, API key, and callback.
+                                                                                   
 	def __init__(self, meeting_id: str, api_key: str, callback: TranscriptCallback):
 		self.meeting_id = meeting_id
 		self._api_key = api_key
@@ -39,12 +39,12 @@ class DeepgramStreamingSession:
 		self._closed = False
 		self._worker: Optional[asyncio.Task] = asyncio.create_task(self._run())
 
-	# Returns whether the session is closed.
+                                         
 	@property
 	def closed(self) -> bool:
 		return self._closed
 
-	# Adds an audio chunk to the queue for transcription.
+                                                      
 	async def add_audio(self, chunk: bytes) -> None:
 		if self._stopping or self._closed:
 			logger.debug('Deepgram session %s ignoring audio: stopping=%s closed=%s', self.meeting_id, self._stopping, self._closed)
@@ -60,7 +60,7 @@ class DeepgramStreamingSession:
 				pass
 			self._audio_queue.put_nowait(chunk)
 
-	# Closes the session gracefully.
+                                 
 	async def close(self) -> None:
 		if self._stopping:
 			return
@@ -81,7 +81,7 @@ class DeepgramStreamingSession:
 			finally:
 				self._worker = None
 
-	# Main worker loop that runs the transcription.
+                                                
 	async def _run(self) -> None:
 		try:
 			await self._transcribe()
@@ -90,19 +90,19 @@ class DeepgramStreamingSession:
 		finally:
 			self._closed = True
 
-	# Connects to Deepgram and manages send/receive loops.
+                                                       
 	async def _transcribe(self) -> None:
 		params = urlencode(
-			{
-				'model': 'nova-2',
-				'encoding': 'linear16',
-				'sample_rate': 16000,
-				'channels': 1,
-				'language': 'en',
-				'interim_results': 'true',
-				'smart_format': 'true',
-				'punctuate': 'true',
-			}
+		 {
+		  'model': 'nova-2',
+		  'encoding': 'linear16',
+		  'sample_rate': 16000,
+		  'channels': 1,
+		  'language': 'en',
+		  'interim_results': 'true',
+		  'smart_format': 'true',
+		  'punctuate': 'true',
+		 }
 		)
 		url = f'{DEEPGRAM_LISTEN_ENDPOINT}?{params}'
 		headers = [('Authorization', f'Token {self._api_key}'), ('Accept', 'application/json')]
@@ -116,14 +116,14 @@ class DeepgramStreamingSession:
 		try:
 			async with ws_connect(url, **connect_kwargs) as websocket:
 				config_msg = {
-					'type': 'start',
-					'encoding': 'linear16',
-					'sample_rate': 16000,
-					'channels': 1,
-					'language': 'en',
-					'interim_results': True,
-					'smart_format': True,
-					'punctuate': True,
+				 'type': 'start',
+				 'encoding': 'linear16',
+				 'sample_rate': 16000,
+				 'channels': 1,
+				 'language': 'en',
+				 'interim_results': True,
+				 'smart_format': True,
+				 'punctuate': True,
 				}
 				await websocket.send(json.dumps(config_msg))
 
@@ -133,7 +133,7 @@ class DeepgramStreamingSession:
 		except Exception as exc:
 			logger.error('Failed to connect to Deepgram for meeting %s: %s', self.meeting_id, exc)
 
-	# Sends audio chunks from the queue to Deepgram.
+                                                 
 	async def _send_audio_loop(self, websocket) -> None:
 		try:
 			while True:
@@ -147,7 +147,7 @@ class DeepgramStreamingSession:
 		except Exception as exc:
 			logger.error('Deepgram audio sender error [%s]: %s', self.meeting_id, exc)
 
-	# Receives transcription results from Deepgram.
+                                                
 	async def _receive_loop(self, websocket) -> None:
 		try:
 			async for message in websocket:
@@ -160,7 +160,7 @@ class DeepgramStreamingSession:
 		except Exception as exc:
 			logger.error('Deepgram message receiver error [%s]: %s', self.meeting_id, exc)
 
-	# Parses a Deepgram message and dispatches transcript callback.
+                                                                
 	async def _handle_deepgram_message(self, payload: dict) -> None:
 		if payload.get('type') != 'Results':
 			return
@@ -176,16 +176,16 @@ class DeepgramStreamingSession:
 		log_level = 'FINAL' if is_final else 'PARTIAL'
 		logger.info('[DG %s]: %s', log_level, transcript_text)
 		transcript_payload = {
-			'type': 'transcript',
-			'meeting_id': self.meeting_id,
-			'text': transcript_text,
-			'is_final': is_final,
-			'confidence': confidence,
-			'timestamp': int(time.time() * 1000),
+		 'type': 'transcript',
+		 'meeting_id': self.meeting_id,
+		 'text': transcript_text,
+		 'is_final': is_final,
+		 'confidence': confidence,
+		 'timestamp': int(time.time() * 1000),
 		}
 		await self._dispatch_callback(transcript_payload)
 
-	# Invokes the transcript callback with error handling.
+                                                       
 	async def _dispatch_callback(self, payload: dict) -> None:
 		try:
 			await self._callback(payload)
@@ -195,7 +195,7 @@ class DeepgramStreamingSession:
 
 class DeepgramSTTService:
 
-	# Initializes the service with API key from environment.
+                                                         
 	def __init__(self):
 		api_key = os.getenv('DEEPGRAM_API_KEY')
 		if not api_key:
@@ -205,12 +205,12 @@ class DeepgramSTTService:
 		self._callbacks: Dict[str, TranscriptCallback] = {}
 		self._lock = asyncio.Lock()
 
-	# Starts a new Deepgram session for a meeting.
+                                               
 	async def start_session(self, meeting_id: str, callback: TranscriptCallback) -> DeepgramStreamingSession:
 		self._callbacks[meeting_id] = callback
 		return await self._create_session(meeting_id, callback)
 
-	# Creates a new session, closing any existing one.
+                                                   
 	async def _create_session(self, meeting_id: str, callback: TranscriptCallback) -> DeepgramStreamingSession:
 		async with self._lock:
 			existing = self._sessions.get(meeting_id)
@@ -222,7 +222,7 @@ class DeepgramSTTService:
 			self._sessions[meeting_id] = session
 			return session
 
-	# Ensures a session exists, recreating if closed.
+                                                  
 	async def _ensure_session(self, meeting_id: str) -> DeepgramStreamingSession:
 		session = self._sessions.get(meeting_id)
 		if session and not session.closed:
@@ -233,12 +233,12 @@ class DeepgramSTTService:
 		logger.info('Rehydrating Deepgram session for meeting %s', meeting_id)
 		return await self._create_session(meeting_id, callback)
 
-	# Sends an audio chunk to the meeting's session.
+                                                 
 	async def send_audio_chunk(self, meeting_id: str, chunk: bytes) -> None:
 		session = await self._ensure_session(meeting_id)
 		await session.add_audio(chunk)
 
-	# Closes and removes a session for a meeting.
+                                              
 	async def close_session(self, meeting_id: str) -> None:
 		async with self._lock:
 			session = self._sessions.pop(meeting_id, None)
@@ -246,7 +246,7 @@ class DeepgramSTTService:
 		if session:
 			await session.close()
 
-	# Closes all active sessions.
+                              
 	async def close_all(self) -> None:
 		async with self._lock:
 			sessions = self._sessions

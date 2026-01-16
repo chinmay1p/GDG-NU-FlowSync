@@ -16,23 +16,23 @@ def create_issue(repo: str, title: str, body: str, token: Optional[str] = None) 
 		logger.warning('Cannot create GitHub issue: repo is missing')
 		return None
 
-	# Use provided token, or fall back to environment variable
+                                                           
 	if not token:
 		token = os.getenv('GITHUB_TOKEN')
-	
+ 
 	if not token:
 		logger.warning('Cannot create GitHub issue: GITHUB_TOKEN is not configured')
 		return None
 
 	issue_payload = {
-		'title': title[:240] if title else 'Meeting task',
-		'body': body or 'Task created from Meeting Intelligence platform.',
+	 'title': title[:240] if title else 'Meeting task',
+	 'body': body or 'Task created from Meeting Intelligence platform.',
 	}
 
 	headers = {
-		'Authorization': f'Bearer {token}',
-		'Accept': 'application/vnd.github+json',
-		'User-Agent': 'meeting-intelligence-extension',
+	 'Authorization': f'Bearer {token}',
+	 'Accept': 'application/vnd.github+json',
+	 'User-Agent': 'meeting-intelligence-extension',
 	}
 
 	url = f'{GITHUB_API_BASE}/repos/{repo_slug}/issues'

@@ -15,17 +15,17 @@ class ContextService:
 
 	CHUNK_SIZE = 10
 
-	# Initializes the context service and ensures Firebase is ready.
+                                                                 
 	def __init__(self) -> None:
 		ensure_firebase_initialized()
 
-	# Retrieves the full organization and team context for a user.
+                                                               
 	async def get_user_context(self, *, uid: str, email: str | None) -> Dict:
 		if not uid:
 			raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Missing user id')
 		return await asyncio.to_thread(self._build_context_sync, uid, email)
 
-	# Synchronously builds the user context including org, teams, and members.
+                                                                           
 	def _build_context_sync(self, uid: str, email: str | None) -> Dict:
 		client = firestore.client()
 
@@ -33,15 +33,15 @@ class ContextService:
 		membership_docs = list(org_members_collection.where('uid', '==', uid).limit(1).stream())
 		if not membership_docs:
 			return {
-				'uid': uid,
-				'email': email,
-				'hasOrg': False,
-				'orgId': None,
-				'orgRole': None,
-				'organization': None,
-				'teams': [],
-				'orgTeams': [],
-				'orgMembers': [],
+			 'uid': uid,
+			 'email': email,
+			 'hasOrg': False,
+			 'orgId': None,
+			 'orgRole': None,
+			 'organization': None,
+			 'teams': [],
+			 'orgTeams': [],
+			 'orgMembers': [],
 			}
 
 		membership_data = membership_docs[0].to_dict() or {}
@@ -57,10 +57,10 @@ class ContextService:
 
 		org_data = org_doc.to_dict() or {}
 		organization_payload = {
-			'orgId': org_doc.id,
-			'name': org_data.get('name', ''),
-			'description': org_data.get('description', ''),
-			'joinCode': org_data.get('joinCode') if org_role == 'ORG_ADMIN' else None,
+		 'orgId': org_doc.id,
+		 'name': org_data.get('name', ''),
+		 'description': org_data.get('description', ''),
+		 'joinCode': org_data.get('joinCode') if org_role == 'ORG_ADMIN' else None,
 		}
 
 		user_team_docs = list(client.collection('team_members').where('uid', '==', uid).stream())
@@ -93,9 +93,9 @@ class ContextService:
 					if not team_id:
 						continue
 					team_members_map[team_id].append({
-						'uid': member_data.get('uid'),
-						'email': member_data.get('email'),
-						'role': member_data.get('role', 'MEMBER'),
+					 'uid': member_data.get('uid'),
+					 'email': member_data.get('email'),
+					 'role': member_data.get('role', 'MEMBER'),
 					})
 
 		org_teams: List[Dict] = []
@@ -103,10 +103,10 @@ class ContextService:
 		for team_doc in team_docs:
 			team_data = team_doc.to_dict() or {}
 			payload = {
-				'teamId': team_doc.id,
-				'teamName': team_data.get('name', 'Untitled Team'),
-				'description': team_data.get('description', ''),
-				'members': team_members_map.get(team_doc.id, []),
+			 'teamId': team_doc.id,
+			 'teamName': team_data.get('name', 'Untitled Team'),
+			 'description': team_data.get('description', ''),
+			 'members': team_members_map.get(team_doc.id, []),
 			}
 			team_lookup[team_doc.id] = payload
 			org_teams.append(payload)
@@ -117,10 +117,10 @@ class ContextService:
 			if not team_entry:
 				continue
 			user_teams.append({
-				'teamId': team_entry['teamId'],
-				'teamName': team_entry['teamName'],
-				'role': role,
-				'members': team_entry['members'],
+			 'teamId': team_entry['teamId'],
+			 'teamName': team_entry['teamName'],
+			 'role': role,
+			 'members': team_entry['members'],
 			})
 
 		org_members_payload: List[Dict] = []
@@ -129,27 +129,27 @@ class ContextService:
 			for member_doc in org_member_docs:
 				member_data = member_doc.to_dict() or {}
 				org_members_payload.append({
-					'uid': member_data.get('uid'),
-					'email': member_data.get('email'),
-					'role': member_data.get('role', 'MEMBER'),
+				 'uid': member_data.get('uid'),
+				 'email': member_data.get('email'),
+				 'role': member_data.get('role', 'MEMBER'),
 				})
 
 		response = {
-			'uid': uid,
-			'email': email,
-			'hasOrg': True,
-			'orgId': org_id,
-			'orgRole': org_role,
-			'organization': organization_payload,
-			'teams': user_teams,
-			'orgTeams': org_teams,
-			'orgMembers': org_members_payload,
+		 'uid': uid,
+		 'email': email,
+		 'hasOrg': True,
+		 'orgId': org_id,
+		 'orgRole': org_role,
+		 'organization': organization_payload,
+		 'teams': user_teams,
+		 'orgTeams': org_teams,
+		 'orgMembers': org_members_payload,
 		}
 
 		logger.info('Context resolved for user %s in org %s', uid, org_id)
 		return response
 
-	# Yields chunks of items for batched Firestore queries.
+                                                        
 	def _chunk(self, items: List[str]):
 		for index in range(0, len(items), self.CHUNK_SIZE):
 			yield items[index:index + self.CHUNK_SIZE]

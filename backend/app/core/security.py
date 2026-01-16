@@ -22,23 +22,23 @@ def ensure_firebase_initialized():
 def initialize_firebase():
 	"""Initialize Firebase Admin SDK once at app startup."""
 	global _firebase_app
-	
+ 
 	if _firebase_app is not None:
 		return _firebase_app
-	
+ 
 	service_account_path = os.getenv('FIREBASE_SERVICE_ACCOUNT_PATH')
-	
+ 
 	if not service_account_path:
 		raise RuntimeError(
-			'FIREBASE_SERVICE_ACCOUNT_PATH environment variable not set. '
-			'Point to your Firebase service account JSON file.'
+		 'FIREBASE_SERVICE_ACCOUNT_PATH environment variable not set. '
+		 'Point to your Firebase service account JSON file.'
 		)
-	
+ 
 	if not os.path.exists(service_account_path):
 		raise RuntimeError(
-			f'Firebase service account file not found at: {service_account_path}'
+		 f'Firebase service account file not found at: {service_account_path}'
 		)
-	
+ 
 	cred = credentials.Certificate(service_account_path)
 	_firebase_app = firebase_admin.initialize_app(cred)
 	logger.info('Firebase Admin SDK initialized')
@@ -64,7 +64,7 @@ def verify_firebase_token_ws(token: str) -> tuple[bool, dict | None, str]:
 	ensure_firebase_initialized()
 	if not token:
 		return False, None, 'Token is required'
-	
+ 
 	try:
 		claims = auth.verify_id_token(token)
 		logger.info(f'WebSocket token verified for uid: {claims.get("uid")}')

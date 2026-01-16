@@ -14,9 +14,9 @@ from app.services.task_approval_service import task_approval_service
 router = APIRouter(prefix='/meetings', tags=['meetings'])
 
 
-# ==========================================
-# RESPONSE MODELS
-# ==========================================
+                                            
+                 
+                                            
 
 class MeetingItem(BaseModel):
     meetingId: str
@@ -118,9 +118,9 @@ class SubmitTasksResponse(BaseModel):
     managersNotified: int = 0
     message: str | None = None
 
-# ==========================================
-# MEETING LIFECYCLE ENDPOINTS
-# ==========================================
+                                            
+                             
+                                            
 
 @router.post('/start', response_model=StartMeetingResponse)
 async def start_meeting(
@@ -128,7 +128,7 @@ async def start_meeting(
     current_user: dict = Depends(get_current_user),
 ):
     """Start a new meeting and initialize transcript storage."""
-    # Get user's org from their membership
+                                          
     org_id = await _get_user_org_id(current_user)
     
     result = await meeting_transcript_service.start_meeting(
@@ -176,9 +176,9 @@ async def delete_meeting(
     return result
 
 
-# ==========================================
-# TRANSCRIPT ENDPOINTS
-# ==========================================
+                                            
+                      
+                                            
 
 @router.post('/{meeting_id}/transcript', response_model=AppendTranscriptResponse)
 async def append_transcript(
@@ -215,9 +215,9 @@ async def get_transcript(
     return result
 
 
-# ==========================================
-# TASK DETECTION ENDPOINTS
-# ==========================================
+                                            
+                          
+                                            
 
 @router.post('/{meeting_id}/tasks', response_model=SubmitTasksResponse)
 async def submit_detected_tasks(
@@ -229,7 +229,7 @@ async def submit_detected_tasks(
     member_data = await _get_org_membership(current_user)
     org_id = member_data.get('orgId')
     
-    # Get meeting to find the team
+                                  
     meeting_data = await meeting_transcript_service.get_meeting(
         meeting_id=meeting_id,
         user_id=current_user.get('uid'),
@@ -241,7 +241,7 @@ async def submit_detected_tasks(
     
     team_id = meeting_data.get('teamId')
     
-    # Normalize tasks
+                     
     normalized_tasks = []
     now_ms = int(time.time() * 1000)
     
@@ -266,7 +266,7 @@ async def submit_detected_tasks(
             message="No valid tasks provided"
         )
     
-    # Emit to managers via WebSocket
+                                    
     result = await task_approval_service.emit_task_detected(
         meeting_id=meeting_id,
         team_id=team_id,
@@ -282,9 +282,9 @@ async def submit_detected_tasks(
     )
 
 
-# ==========================================
-# SUMMARY ENDPOINTS
-# ==========================================
+                                            
+                   
+                                            
 
 @router.get('/{meeting_id}/summary', response_model=SummaryResponse)
 async def get_summary(
@@ -302,9 +302,9 @@ async def get_summary(
     return result
 
 
-# ==========================================
-# MEETING LISTING ENDPOINTS
-# ==========================================
+                                            
+                           
+                                            
 
 @router.get('', response_model=List[MeetingItem])
 async def list_meetings(
@@ -315,7 +315,7 @@ async def list_meetings(
     """List meetings for user's teams."""
     org_id = await _get_user_org_id(current_user)
     
-    # Try to get meetings from transcript service first
+                                                       
     meetings = await meeting_transcript_service.list_meetings(
         user_id=current_user.get('uid'),
         org_id=org_id,
@@ -323,17 +323,17 @@ async def list_meetings(
         limit=limit,
     )
     
-    # Also include Zoom meetings for backward compatibility
+                                                           
     try:
         zoom_meetings = zoom_service.list_meetings_for_user(current_user.get('uid'))
         
-        # Merge, avoiding duplicates by meetingId
+                                                 
         existing_ids = {m.get('meetingId') for m in meetings}
         for zm in zoom_meetings:
             if zm.get('meetingId') not in existing_ids:
                 meetings.append(zm)
     except Exception:
-        pass  # Zoom service may not be configured
+        pass                                      
     
     return meetings
 
@@ -354,9 +354,9 @@ async def get_meeting(
     return result
 
 
-# ==========================================
-# HELPERS
-# ==========================================
+                                            
+         
+                                            
 
 async def _get_user_org_id(current_user: dict) -> str:
     """Get the organization ID for the current user."""
@@ -376,7 +376,7 @@ async def _get_org_membership(current_user: dict) -> dict:
     if not uid:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid user")
     
-    # Query org_members to find user's organization
+                                                   
     docs = list(client.collection('org_members').where('uid', '==', uid).limit(1).stream())
     if not docs:
         raise HTTPException(
