@@ -1,5 +1,5 @@
-# 🚀 StrataGem
-### Team: MindLoop
+# 🚀 FlowSync
+### Team: Travelling Salesmen
 
 An all-in-one **project management, task management, and meeting intelligence platform** that connects **Slack, GitHub, dashboards, and Google Meet** to ensure that **no action item is ever lost**.
 
@@ -160,32 +160,6 @@ Task reasoning and meeting intelligence
 - Slack requests verified using signing secret
 - No trust in frontend for access control
 - AI never auto-executes actions
-
----
-
-## 🤝 Zoom AI Ingestion Pipeline
-
-The `zoom-test` bot can now stream transcripts, summaries, and detected tasks directly into StrataGem using the protected `/zoom-ai` endpoints. All requests must include the header `X-Zoom-Bot-Key` with the secret stored in `ZOOM_BOT_API_KEY`.
-
-### Endpoints
-
-| Endpoint | Payload | Purpose |
-| --- | --- | --- |
-| `POST /zoom-ai/meetings/{meetingId}/segments` | `{ orgId, teamId?, text, timestamp, speaker? }` | Appends finalized STT segments to `meeting_transcripts/{meetingId}`. Missing meetings are auto-created. |
-| `POST /zoom-ai/meetings/{meetingId}/complete` | `{ orgId, teamId?, generateSummary? }` | Marks the meeting as completed and triggers a single Gemini summary generation. |
-| `POST /zoom-ai/meetings/{meetingId}/tasks` | `{ orgId, teamId?, tasks: [...] }` | Stores AI-detected tasks as pending approvals and emits `TASK_DETECTED` WebSocket events to managers. |
-
-### Stored Data
-
-- **Transcripts:** Each meeting keeps an append-only `segments[]` array (`text`, `timestamp`, `speaker`).
-- **Summaries:** Gemini output lives under `meeting_summaries/{meetingId}` with title, blocks, next steps, etc.
-- **Tasks:** Pending approvals stay under `pending_task_approvals` with `status = PENDING` until every candidate is approved or rejected.
-
-### Frontend Experience
-
-- Managers/Admins see a persistent Task Approval popup (with snooze + batch approve/reject, full editing per field, GitHub issue toggle, and historical reload support).
-- Batch actions call the new `/tasks/approve/batch` and `/tasks/reject/batch` APIs.
-- Employees can browse historical meetings via the Meetings page “Details” drawer, which shows the full transcript and AI summary (restricted to team members by backend checks).
 
 ---
 
